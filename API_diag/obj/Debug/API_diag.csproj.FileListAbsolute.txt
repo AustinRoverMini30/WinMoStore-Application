@@ -1,0 +1,17 @@
+C:\Users\nicol\OneDrive\Documents\Visual Studio 2008\Projects\API_diag\API_diag\bin\Debug\API_diag.exe
+C:\Users\nicol\OneDrive\Documents\Visual Studio 2008\Projects\API_diag\API_diag\bin\Debug\API_diag.pdb
+C:\Users\nicol\OneDrive\Documents\Visual Studio 2008\Projects\API_diag\API_diag\obj\Debug\ResolveAssemblyReference.cache
+C:\Users\nicol\OneDrive\Documents\Visual Studio 2008\Projects\API_diag\API_diag\obj\Debug\API_diag.Form1.resources
+C:\Users\nicol\OneDrive\Documents\Visual Studio 2008\Projects\API_diag\API_diag\obj\Debug\API_diag.Properties.Resources.resources
+C:\Users\nicol\OneDrive\Documents\Visual Studio 2008\Projects\API_diag\API_diag\obj\Debug\API_diag.csproj.GenerateResource.Cache
+C:\Users\nicol\OneDrive\Documents\Visual Studio 2008\Projects\API_diag\API_diag\obj\Debug\API_diag.exe
+C:\Users\nicol\OneDrive\Documents\Visual Studio 2008\Projects\API_diag\API_diag\obj\Debug\API_diag.pdb
+C:\Users\nicol\Documents\Visual Studio 2008\Projects\API_diag\API_diag\bin\Debug\API_diag.exe
+C:\Users\nicol\Documents\Visual Studio 2008\Projects\API_diag\API_diag\bin\Debug\API_diag.pdb
+C:\Users\nicol\Documents\Visual Studio 2008\Projects\API_diag\API_diag\obj\Debug\ResolveAssemblyReference.cache
+C:\Users\nicol\Documents\Visual Studio 2008\Projects\API_diag\API_diag\obj\Debug\API_diag.Properties.Resources.resources
+C:\Users\nicol\Documents\Visual Studio 2008\Projects\API_diag\API_diag\obj\Debug\API_diag.csproj.GenerateResource.Cache
+C:\Users\nicol\Documents\Visual Studio 2008\Projects\API_diag\API_diag\obj\Debug\API_diag.exe
+C:\Users\nicol\Documents\Visual Studio 2008\Projects\API_diag\API_diag\obj\Debug\API_diag.pdb
+C:\Users\nicol\Documents\Visual Studio 2008\Projects\API_diag\API_diag\bin\Debug\CodeBetter.Json.CF.dll
+C:\Users\nicol\Documents\Visual Studio 2008\Projects\API_diag\API_diag\obj\Debug\API_diag.WinMoStore.resources
