@@ -1,2 +1,4 @@
-/API_diag/bin
-/API_diag/obj
+/**/bin
+/**/obj
+/**/Debug
+/**/Release
