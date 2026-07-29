@@ -14,4 +14,3 @@ C:\Users\nicol\Documents\Visual Studio 2008\Projects\API_diag\API_diag\obj\Debug
 C:\Users\nicol\Documents\Visual Studio 2008\Projects\API_diag\API_diag\obj\Debug\API_diag.exe
 C:\Users\nicol\Documents\Visual Studio 2008\Projects\API_diag\API_diag\obj\Debug\API_diag.pdb
 C:\Users\nicol\Documents\Visual Studio 2008\Projects\API_diag\API_diag\bin\Debug\CodeBetter.Json.CF.dll
-C:\Users\nicol\Documents\Visual Studio 2008\Projects\API_diag\API_diag\obj\Debug\API_diag.WinMoStore.resources
