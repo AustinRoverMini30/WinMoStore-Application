@@ -25,6 +25,9 @@ namespace API_diag
         public static readonly Color CouleurTexte = Color.FromArgb(40, 40, 40);
         public static readonly Color CouleurTexteSecondaire = Color.FromArgb(130, 130, 130);
         public static readonly Color CouleurTexteClair = Color.White;
+        public static readonly Color CouleurSanteInconnue = Color.FromArgb(160, 160, 160);
+        public static readonly Color CouleurSanteOk = Color.FromArgb(76, 175, 80);
+        public static readonly Color CouleurSanteKo = Color.FromArgb(220, 53, 69);
 
         public static readonly Font PoliceEntete = new Font("Tahoma", 10, FontStyle.Bold);
         public static readonly Font PoliceTitreDetail = new Font("Tahoma", 13, FontStyle.Bold);
@@ -41,6 +44,10 @@ namespace API_diag
         // --- Page liste ---
         private Panel panelHeaderListe;
         private Label labelHeaderListe;
+        private Panel pastilleSante;
+        private Panel panelRecherche;
+        private TextBox textBoxRecherche;
+        private Button buttonRechercher;
         private Label label1;
         private Panel panel1;
         private MainMenu mainMenu1;
@@ -61,16 +68,21 @@ namespace API_diag
         private const int hauteurEntete = 28;
         private bool chargementEnCours = false;
         private bool telechargementEnCours = false;
+        private bool verificationSanteEnCours = false;
 
         private ApplicationApi _appCourante;
+        private Color _couleurSante = Theme.CouleurSanteInconnue;
+        private System.Windows.Forms.Timer minuterieSante;
 
         private delegate void ChargementTermineDelegate(string jsonResponse, string erreur);
         private delegate void ProgressionTelechargementDelegate(int pourcentage);
         private delegate void TelechargementTermineDelegate(string cheminFichier, string erreur);
+        private delegate void SanteVerifieeDelegate(bool enLigne);
 
         public WinMoStore()
         {
             InitialiserComposants();
+            InitialiserSurveillanceSante();
         }
 
         private void InitialiserComposants()
@@ -107,13 +119,53 @@ namespace API_diag
             labelHeaderListe.Font = Theme.PoliceEntete;
             labelHeaderListe.Left = 8;
             labelHeaderListe.Top = 5;
-            labelHeaderListe.Width = panelHeaderListe.Width - 16;
+            labelHeaderListe.Width = panelHeaderListe.Width - 32; // laisse la place à la pastille à droite
             labelHeaderListe.Height = hauteurEntete - 5;
+
+            // Pastille de statut serveur : même couleur de fond que l'en-tête pour que
+            // seul le cercle dessiné dedans soit visible (astuce déjà utilisée pour les bordures de carte).
+            pastilleSante = new Panel();
+            pastilleSante.Width = 12;
+            pastilleSante.Height = 12;
+            pastilleSante.Left = panelHeaderListe.Width - 20;
+            pastilleSante.Top = (hauteurEntete - 12) / 2;
+            pastilleSante.BackColor = Theme.CouleurAccent;
+            pastilleSante.Paint += new PaintEventHandler(Pastille_Paint);
+
             panelHeaderListe.Controls.Add(labelHeaderListe);
+            panelHeaderListe.Controls.Add(pastilleSante);
+
+            // --- Barre de recherche ---
+            panelRecherche = new Panel();
+            panelRecherche.Left = 0;
+            panelRecherche.Top = panelHeaderListe.Top + panelHeaderListe.Height;
+            panelRecherche.Width = this.ClientSize.Width;
+            panelRecherche.Height = 34;
+            panelRecherche.BackColor = Theme.CouleurFond;
+
+            buttonRechercher = new Button();
+            buttonRechercher.Text = "Chercher";
+            buttonRechercher.Font = Theme.PolicePetite;
+            buttonRechercher.Width = 70;
+            buttonRechercher.Height = 24;
+            buttonRechercher.Left = panelRecherche.Width - buttonRechercher.Width - 8;
+            buttonRechercher.Top = 5;
+            buttonRechercher.Click += new EventHandler(buttonRechercher_Click);
+
+            textBoxRecherche = new TextBox();
+            textBoxRecherche.Left = 8;
+            textBoxRecherche.Top = 5;
+            textBoxRecherche.Width = buttonRechercher.Left - 16;
+            textBoxRecherche.Height = 24;
+            textBoxRecherche.Font = Theme.PoliceNormale;
+            textBoxRecherche.KeyDown += new KeyEventHandler(textBoxRecherche_KeyDown);
+
+            panelRecherche.Controls.Add(textBoxRecherche);
+            panelRecherche.Controls.Add(buttonRechercher);
 
             label1 = new Label();
             label1.Left = 8;
-            label1.Top = panelHeaderListe.Top + panelHeaderListe.Height + 4;
+            label1.Top = panelRecherche.Top + panelRecherche.Height + 4;
             label1.Width = this.ClientSize.Width - 16;
             label1.Height = 18;
             label1.ForeColor = Theme.CouleurTexteSecondaire;
@@ -231,6 +283,7 @@ namespace API_diag
             this.Controls.Add(panelDetails);
             this.Controls.Add(panel1);
             this.Controls.Add(label1);
+            this.Controls.Add(panelRecherche);
             this.Controls.Add(panelHeaderListe);
         }
 
@@ -243,7 +296,143 @@ namespace API_diag
             }
         }
 
+        // Dessine le cercle coloré représentant l'état du serveur (vert/rouge/gris).
+        private void Pastille_Paint(object sender, PaintEventArgs pe)
+        {
+            Panel p = (Panel)sender;
+            using (SolidBrush brush = new SolidBrush(_couleurSante))
+            {
+                pe.Graphics.FillEllipse(brush, 0, 0, p.Width - 1, p.Height - 1);
+            }
+        }
+
+        #region Surveillance de /api/health
+
+        private void InitialiserSurveillanceSante()
+        {
+            minuterieSante = new System.Windows.Forms.Timer();
+            minuterieSante.Interval = 15000; // 15 secondes
+            minuterieSante.Tick += new EventHandler(minuterieSante_Tick);
+            minuterieSante.Enabled = true;
+
+            VerifierSante(); // premier contrôle immédiat au démarrage
+        }
+
+        private void minuterieSante_Tick(object sender, EventArgs e)
+        {
+            VerifierSante();
+        }
+
+        // Interroge /api/health sur un thread séparé pour ne jamais bloquer l'interface.
+        private void VerifierSante()
+        {
+            if (verificationSanteEnCours) return;
+            verificationSanteEnCours = true;
+
+            Thread threadSante = new Thread(new ThreadStart(delegate
+            {
+                bool enLigne = false;
+                try
+                {
+                    HttpWebRequest request = (HttpWebRequest)WebRequest.Create(ApiBaseUrl + "/api/health");
+                    request.Method = "GET";
+                    request.Timeout = 5000; // évite d'attendre indéfiniment si le serveur ne répond pas
+
+                    using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
+                    {
+                        enLigne = (response.StatusCode == HttpStatusCode.OK);
+                    }
+                }
+                catch
+                {
+                    enLigne = false;
+                }
+
+                this.Invoke(new SanteVerifieeDelegate(SanteVerifiee), new object[] { enLigne });
+            }));
+
+            threadSante.IsBackground = true;
+            threadSante.Start();
+        }
+
+        private void SanteVerifiee(bool enLigne)
+        {
+            verificationSanteEnCours = false;
+            _couleurSante = enLigne ? Theme.CouleurSanteOk : Theme.CouleurSanteKo;
+            pastilleSante.Invalidate();
+        }
+
+        #endregion
+
+        #region Barre de recherche
+
+        private void textBoxRecherche_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode == Keys.Enter)
+            {
+                LancerRecherche();
+            }
+        }
+
+        private void buttonRechercher_Click(object sender, EventArgs e)
+        {
+            LancerRecherche();
+        }
+
+        private void LancerRecherche()
+        {
+            string motCle = textBoxRecherche.Text.Trim();
+            string url;
+
+            if (motCle.Length == 0)
+            {
+                url = ApiBaseUrl + "/api/applications";
+            }
+            else
+            {
+                url = ApiBaseUrl + "/api/applications/search?q=" + EncoderComposantUrl(motCle);
+            }
+
+            ChargerApplications(url);
+        }
+
+        // Encodage URL manuel : Uri.EscapeDataString n'est pas garanti disponible sur CF 3.5,
+        // donc on encode nous-mêmes pour rester sûr sur ce framework.
+        private static string EncoderComposantUrl(string valeur)
+        {
+            if (string.IsNullOrEmpty(valeur)) return string.Empty;
+
+            byte[] octets = Encoding.UTF8.GetBytes(valeur);
+            StringBuilder sb = new StringBuilder();
+
+            foreach (byte b in octets)
+            {
+                char c = (char)b;
+                bool sur = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+                           c == '-' || c == '_' || c == '.' || c == '~';
+                if (sur)
+                {
+                    sb.Append(c);
+                }
+                else
+                {
+                    sb.Append('%');
+                    sb.Append(((int)b).ToString("X2"));
+                }
+            }
+            return sb.ToString();
+        }
+
+        #endregion
+
         private void menuItem1_Click(object sender, EventArgs e)
+        {
+            textBoxRecherche.Text = ""; // "Actualiser" revient toujours à la liste complète
+            ChargerApplications(ApiBaseUrl + "/api/applications");
+        }
+
+        // Méthode générique de chargement, utilisée pour la liste complète ET la recherche.
+        private void ChargerApplications(string url)
         {
             if (chargementEnCours) return;
 
@@ -252,8 +441,6 @@ namespace API_diag
             label1.ForeColor = Theme.CouleurTexteSecondaire;
             panel1.Controls.Clear();
 
-            string apiUrl = ApiBaseUrl + "/api/applications";
-
             Thread threadChargement = new Thread(new ThreadStart(delegate
             {
                 string jsonResponse = null;
@@ -261,7 +448,7 @@ namespace API_diag
 
                 try
                 {
-                    jsonResponse = GetApiData(apiUrl);
+                    jsonResponse = GetApiData(url);
                 }
                 catch (Exception ex)
                 {
@@ -394,6 +581,7 @@ namespace API_diag
             this.SuspendLayout();
             panel1.Visible = false;
             panelHeaderListe.Visible = false;
+            panelRecherche.Visible = false;
             label1.Visible = false;
             panelDetails.Visible = true;
             this.ResumeLayout();
@@ -443,7 +631,7 @@ namespace API_diag
             {
                 long tailleTotale = response.ContentLength;
 
-                string dossierDestination = "\\My Storage\\My Documents";
+                string dossierDestination = "\\My Documents";
                 if (!Directory.Exists(dossierDestination))
                 {
                     dossierDestination = "\\";
@@ -482,8 +670,6 @@ namespace API_diag
             labelStatutTelechargement.Text = pourcentage + " %";
         }
 
-        // Exécuté sur le thread UI via Invoke une fois le téléchargement terminé.
-        // Lance maintenant automatiquement l'installation du .cab.
         private void TelechargementTermine(string cheminFichier, string erreur)
         {
             telechargementEnCours = false;
@@ -503,9 +689,6 @@ namespace API_diag
             LancerInstallation(cheminFichier);
         }
 
-        // Lance l'installeur natif Windows Mobile associé aux fichiers .cab (wceload.exe).
-        // Une fois lancé, l'appli n'a plus la main sur la suite : c'est l'OS qui affiche
-        // sa propre fenêtre d'installation, et l'appli ne reçoit aucune notification de fin.
         private void LancerInstallation(string cheminFichier)
         {
             try
@@ -526,6 +709,7 @@ namespace API_diag
             panelDetails.Visible = false;
             panel1.Visible = true;
             panelHeaderListe.Visible = true;
+            panelRecherche.Visible = true;
             label1.Visible = true;
             this.ResumeLayout();
         }
