@@ -16,9 +16,13 @@ namespace API_diag
 
         // --- Page liste ---
         private Panel panelHeaderListe;
+        private Panel logoMark;
+        private Label labelLogo;
         private Label labelHeaderListe;
+        private Label labelSousTitreListe;
         private Panel pastilleSante;
         private Panel panelRecherche;
+        private Panel panelPilleRecherche;
         private TextBox textBoxRecherche;
         private Button buttonRechercher;
         private Label label1;
@@ -39,13 +43,13 @@ namespace API_diag
         private ProgressBar progressTelechargement;
         private Label labelStatutTelechargement;
 
-        private const int hauteurEntete = 28;
+        private const int hauteurEntete = 54;
         private bool chargementEnCours = false;
         private bool telechargementEnCours = false;
         private bool verificationSanteEnCours = false;
 
         private ApplicationApi _appCourante;
-        private ApplicationApi[] _dernieresApplications; // pour recalculer la liste après un redimensionnement/rotation
+        private ApplicationApi[] _dernieresApplications;
         private Color _couleurSante = Theme.CouleurSanteInconnue;
         private System.Windows.Forms.Timer minuterieSante;
 
@@ -62,27 +66,21 @@ namespace API_diag
             InitialiserSurveillanceSante();
         }
 
-        // Réagit à tout changement de taille du formulaire, y compris une rotation d'écran
-        // (portrait <-> paysage), qui déclenche ce même événement sur Windows Mobile.
         private void WinMoStore_Resize(object sender, EventArgs e)
         {
             PositionnerControles();
 
-            // Recalcule la largeur des cartes déjà affichées, sinon elles garderaient
-            // l'ancienne largeur d'écran après une rotation.
             if (_dernieresApplications != null)
             {
                 AfficherApplications(_dernieresApplications);
             }
         }
 
-        // Crée tous les contrôles UNE SEULE FOIS : couleurs, polices, textes fixes,
-        // gestionnaires d'événements. Aucune géométrie ici (voir PositionnerControles).
         private void CreerControles()
         {
             this.Text = "WinMo Store";
             this.BackColor = Theme.CouleurFond;
-            this.WindowState = FormWindowState.Maximized; // occupe tout l'écran, quelle que soit sa résolution
+            this.WindowState = FormWindowState.Maximized;
 
             menuItem1 = new MenuItem();
             menuItem1.Text = "Actualiser";
@@ -100,33 +98,65 @@ namespace API_diag
             // ===================== PAGE LISTE =====================
 
             panelHeaderListe = new Panel();
-            panelHeaderListe.BackColor = Theme.CouleurAccent;
+            panelHeaderListe.BackColor = Theme.CouleurFond; // plus de bandeau plein : header à plat, façon appli moderne
+
+            // "Logo" fait maison : carré arrondi accent avec une initiale, en l'absence d'icône réelle.
+            logoMark = new Panel();
+            logoMark.BackColor = Theme.CouleurFond;
+            logoMark.Paint += new PaintEventHandler(LogoMark_Paint);
+
+            labelLogo = new Label();
+            labelLogo.Text = "W";
+            labelLogo.Font = Theme.PoliceLogo;
+            labelLogo.ForeColor = Theme.CouleurTexteClair;
+            labelLogo.BackColor = Theme.CouleurAccent; // même couleur que le fond dessiné, pas de bord visible
+            labelLogo.TextAlign = ContentAlignment.TopCenter;
+            logoMark.Controls.Add(labelLogo);
 
             labelHeaderListe = new Label();
-            labelHeaderListe.Text = "Applications disponibles";
-            labelHeaderListe.ForeColor = Theme.CouleurTexteClair;
+            labelHeaderListe.Text = "WinMo Store";
+            labelHeaderListe.ForeColor = Theme.CouleurTexte;
             labelHeaderListe.Font = Theme.PoliceEntete;
 
+            labelSousTitreListe = new Label();
+            labelSousTitreListe.Text = "Applications disponibles";
+            labelSousTitreListe.ForeColor = Theme.CouleurTexteSecondaire;
+            labelSousTitreListe.Font = Theme.PoliceSousTitre;
+
             pastilleSante = new Panel();
-            pastilleSante.BackColor = Theme.CouleurAccent;
+            pastilleSante.BackColor = Theme.CouleurFond;
             pastilleSante.Paint += new PaintEventHandler(Pastille_Paint);
 
+            panelHeaderListe.Controls.Add(logoMark);
             panelHeaderListe.Controls.Add(labelHeaderListe);
+            panelHeaderListe.Controls.Add(labelSousTitreListe);
             panelHeaderListe.Controls.Add(pastilleSante);
 
+            // --- Barre de recherche en forme de pilule ---
             panelRecherche = new Panel();
             panelRecherche.BackColor = Theme.CouleurFond;
 
-            buttonRechercher = new Button();
-            buttonRechercher.Text = "Chercher";
-            buttonRechercher.Font = Theme.PolicePetite;
-            buttonRechercher.Click += new EventHandler(buttonRechercher_Click);
+            panelPilleRecherche = new Panel();
+            panelPilleRecherche.BackColor = Theme.CouleurFond; // blend avec le fond pour les coins découpés
+            panelPilleRecherche.Paint += new PaintEventHandler(PilleRecherche_Paint);
 
             textBoxRecherche = new TextBox();
             textBoxRecherche.Font = Theme.PoliceNormale;
+            textBoxRecherche.ForeColor = Theme.CouleurTexte;
+            textBoxRecherche.BackColor = Theme.CouleurCarte;
+            try { textBoxRecherche.BorderStyle = BorderStyle.None; }
+            catch { /* ignoré si non supporté par la ROM */ }
             textBoxRecherche.KeyDown += new KeyEventHandler(textBoxRecherche_KeyDown);
+            panelPilleRecherche.Controls.Add(textBoxRecherche);
 
-            panelRecherche.Controls.Add(textBoxRecherche);
+            buttonRechercher = new Button();
+            buttonRechercher.Text = "→";
+            buttonRechercher.Font = Theme.PoliceBouton;
+            buttonRechercher.ForeColor = Theme.CouleurTexteClair;
+            buttonRechercher.BackColor = Theme.CouleurAccent;
+            buttonRechercher.Click += new EventHandler(buttonRechercher_Click);
+
+            panelRecherche.Controls.Add(panelPilleRecherche);
             panelRecherche.Controls.Add(buttonRechercher);
 
             label1 = new Label();
@@ -146,17 +176,17 @@ namespace API_diag
             panelDetails.AutoScroll = true;
 
             panelHeaderDetails = new Panel();
-            panelHeaderDetails.BackColor = Theme.CouleurAccent;
+            panelHeaderDetails.BackColor = Theme.CouleurFond;
 
             labelHeaderDetails = new Label();
             labelHeaderDetails.Text = "Détails de l'application";
-            labelHeaderDetails.ForeColor = Theme.CouleurTexteClair;
+            labelHeaderDetails.ForeColor = Theme.CouleurTexte;
             labelHeaderDetails.Font = Theme.PoliceEntete;
             panelHeaderDetails.Controls.Add(labelHeaderDetails);
 
             carteInfo = new Panel();
-            carteInfo.BackColor = Theme.CouleurCarte;
-            carteInfo.Paint += new PaintEventHandler(CarteAvecBordure_Paint);
+            carteInfo.BackColor = Theme.CouleurFond;
+            carteInfo.Paint += new PaintEventHandler(CarteInfo_Paint);
 
             labelNomDetails = new Label();
             labelNomDetails.Font = Theme.PoliceTitreDetail;
@@ -190,6 +220,7 @@ namespace API_diag
             buttonRetour.Text = "‹ Retour";
             buttonRetour.Font = Theme.PoliceNormale;
             buttonRetour.ForeColor = Theme.CouleurTexte;
+            buttonRetour.BackColor = Theme.CouleurCarte;
             buttonRetour.Click += new EventHandler(buttonRetour_Click);
 
             panelDetails.Controls.Add(buttonRetour);
@@ -206,8 +237,6 @@ namespace API_diag
             this.Controls.Add(panelHeaderListe);
         }
 
-        // Recalcule TOUTE la géométrie à partir de la taille réelle actuelle de l'écran.
-        // Appelée au démarrage et à chaque redimensionnement/rotation.
         private void PositionnerControles()
         {
             int largeur = this.ClientSize.Width;
@@ -219,30 +248,50 @@ namespace API_diag
             panelHeaderListe.Width = largeur;
             panelHeaderListe.Height = hauteurEntete;
 
-            labelHeaderListe.Left = 8;
-            labelHeaderListe.Top = 5;
-            labelHeaderListe.Width = panelHeaderListe.Width - 32;
-            labelHeaderListe.Height = hauteurEntete - 5;
+            logoMark.Left = 10;
+            logoMark.Top = (hauteurEntete - 32) / 2;
+            logoMark.Width = 32;
+            logoMark.Height = 32;
+
+            labelLogo.Left = 6;
+            labelLogo.Top = 6;
+            labelLogo.Width = 20;
+            labelLogo.Height = 20;
 
             pastilleSante.Width = 12;
             pastilleSante.Height = 12;
-            pastilleSante.Left = panelHeaderListe.Width - 20;
+            pastilleSante.Left = largeur - 22;
             pastilleSante.Top = (hauteurEntete - 12) / 2;
+
+            labelHeaderListe.Left = logoMark.Left + logoMark.Width + 10;
+            labelHeaderListe.Top = 6;
+            labelHeaderListe.Width = pastilleSante.Left - labelHeaderListe.Left - 6;
+            labelHeaderListe.Height = 20;
+
+            labelSousTitreListe.Left = labelHeaderListe.Left;
+            labelSousTitreListe.Top = labelHeaderListe.Top + labelHeaderListe.Height;
+            labelSousTitreListe.Width = labelHeaderListe.Width;
+            labelSousTitreListe.Height = 16;
 
             panelRecherche.Left = 0;
             panelRecherche.Top = panelHeaderListe.Top + panelHeaderListe.Height;
             panelRecherche.Width = largeur;
-            panelRecherche.Height = 34;
+            panelRecherche.Height = 44;
 
-            buttonRechercher.Width = 70;
-            buttonRechercher.Height = 24;
+            buttonRechercher.Width = 44;
+            buttonRechercher.Height = 32;
             buttonRechercher.Left = panelRecherche.Width - buttonRechercher.Width - 8;
-            buttonRechercher.Top = 5;
+            buttonRechercher.Top = (panelRecherche.Height - buttonRechercher.Height) / 2;
 
-            textBoxRecherche.Left = 8;
-            textBoxRecherche.Top = 5;
-            textBoxRecherche.Width = buttonRechercher.Left - 16;
-            textBoxRecherche.Height = 24;
+            panelPilleRecherche.Left = 8;
+            panelPilleRecherche.Top = (panelRecherche.Height - 32) / 2;
+            panelPilleRecherche.Width = buttonRechercher.Left - 8 - 8;
+            panelPilleRecherche.Height = 32;
+
+            textBoxRecherche.Left = 14;
+            textBoxRecherche.Top = (panelPilleRecherche.Height - 20) / 2;
+            textBoxRecherche.Width = panelPilleRecherche.Width - 24;
+            textBoxRecherche.Height = 20;
 
             label1.Left = 8;
             label1.Top = panelRecherche.Top + panelRecherche.Height + 4;
@@ -263,26 +312,26 @@ namespace API_diag
             panelHeaderDetails.Left = 0;
             panelHeaderDetails.Top = 0;
             panelHeaderDetails.Width = panelDetails.Width;
-            panelHeaderDetails.Height = hauteurEntete;
+            panelHeaderDetails.Height = hauteurEntete - 20;
 
             labelHeaderDetails.Left = 8;
-            labelHeaderDetails.Top = 5;
+            labelHeaderDetails.Top = 10;
             labelHeaderDetails.Width = panelHeaderDetails.Width - 16;
-            labelHeaderDetails.Height = hauteurEntete - 5;
+            labelHeaderDetails.Height = 22;
 
             carteInfo.Left = 10;
             carteInfo.Top = panelHeaderDetails.Height + 12;
             carteInfo.Width = panelDetails.Width - 20;
             carteInfo.Height = 90;
 
-            labelNomDetails.Left = 10;
-            labelNomDetails.Top = 10;
-            labelNomDetails.Width = carteInfo.Width - 20;
+            labelNomDetails.Left = 14;
+            labelNomDetails.Top = 12;
+            labelNomDetails.Width = carteInfo.Width - 28;
             labelNomDetails.Height = 40;
 
-            labelIdDetails.Left = 10;
+            labelIdDetails.Left = 14;
             labelIdDetails.Top = labelNomDetails.Top + labelNomDetails.Height;
-            labelIdDetails.Width = carteInfo.Width - 20;
+            labelIdDetails.Width = carteInfo.Width - 28;
             labelIdDetails.Height = 30;
 
             buttonTelecharger.Left = 10;
@@ -306,12 +355,33 @@ namespace API_diag
             buttonRetour.Height = 36;
         }
 
-        private void CarteAvecBordure_Paint(object sender, PaintEventArgs pe)
+        // Fond arrondi accent du logo maison ("W").
+        private void LogoMark_Paint(object sender, PaintEventArgs pe)
         {
             Panel p = (Panel)sender;
-            using (Pen pen = new Pen(Theme.CouleurBordure))
+            using (SolidBrush brush = new SolidBrush(Theme.CouleurAccent))
             {
-                pe.Graphics.DrawRectangle(pen, 0, 0, p.Width - 1, p.Height - 1);
+                RenduArrondi.RemplirRectangleArrondi(pe.Graphics, brush, 0, 0, p.Width, p.Height, 10);
+            }
+        }
+
+        // Pilule de recherche : coins totalement arrondis (rayon = moitié de la hauteur).
+        private void PilleRecherche_Paint(object sender, PaintEventArgs pe)
+        {
+            Panel p = (Panel)sender;
+            using (SolidBrush brush = new SolidBrush(Theme.CouleurCarte))
+            {
+                RenduArrondi.RemplirRectangleArrondi(pe.Graphics, brush, 0, 0, p.Width, p.Height, p.Height / 2);
+            }
+        }
+
+        // Carte "surface élevée" à coins arrondis, utilisée sur la page détails.
+        private void CarteInfo_Paint(object sender, PaintEventArgs pe)
+        {
+            Panel p = (Panel)sender;
+            using (SolidBrush brush = new SolidBrush(Theme.CouleurCarte))
+            {
+                RenduArrondi.RemplirRectangleArrondi(pe.Graphics, brush, 0, 0, p.Width, p.Height, 14);
             }
         }
 
@@ -403,7 +473,7 @@ namespace API_diag
 
             if (motCle.Length == 0)
             {
-                url = ApiBaseUrl + "/api/applications";
+                url = ApiBaseUrl + "/api/applications/todaylist";
             }
             else
             {
@@ -443,7 +513,7 @@ namespace API_diag
         private void menuItem1_Click(object sender, EventArgs e)
         {
             textBoxRecherche.Text = "";
-            ChargerApplications(ApiBaseUrl + "/api/applications");
+            ChargerApplications(ApiBaseUrl + "/api/applications/todaylist");
         }
 
         private void ChargerApplications(string url)
@@ -520,58 +590,92 @@ namespace API_diag
 
         private void AfficherApplications(ApplicationApi[] apps)
         {
-            _dernieresApplications = apps; // mémorisé pour recalcul lors d'une rotation d'écran
+            _dernieresApplications = apps;
 
             panel1.SuspendLayout();
             panel1.Controls.Clear();
 
-            const int hauteurItem = 52;
-            const int marge = 6;
+            const int hauteurItem = 54;
+            const int marge = 8;
 
             for (int i = 0; i < apps.Length; i++)
             {
                 ApplicationApi app = apps[i];
+                bool carteEnfoncee = false; // état local capturé par les délégués ci-dessous
 
                 Panel carte = new Panel();
                 carte.Left = 8;
                 carte.Top = i * (hauteurItem + marge) + marge;
                 carte.Width = panel1.ClientSize.Width - 16;
                 carte.Height = hauteurItem;
-                carte.BackColor = Theme.CouleurCarte;
-                carte.Paint += new PaintEventHandler(CarteAvecBordure_Paint);
+                carte.BackColor = Theme.CouleurFond; // blend avec le fond pour les coins découpés
+
+                PaintEventHandler carteArrondiePaint = delegate(object s, PaintEventArgs pe)
+                {
+                    Color couleurSurface = carteEnfoncee ? Theme.CouleurCartePressee : Theme.CouleurCarte;
+                    using (SolidBrush brush = new SolidBrush(couleurSurface))
+                    {
+                        RenduArrondi.RemplirRectangleArrondi(pe.Graphics, brush, 0, 0, carte.Width, carte.Height, 14);
+                    }
+                };
+                carte.Paint += carteArrondiePaint;
 
                 Label lblNom = new Label();
                 lblNom.Text = app.name;
                 lblNom.Font = Theme.PoliceNormaleGrasse;
                 lblNom.ForeColor = Theme.CouleurTexte;
-                lblNom.Left = 10;
-                lblNom.Top = 8;
-                lblNom.Width = carte.Width - 40;
+                lblNom.BackColor = Theme.CouleurCarte;
+                lblNom.Left = 14;
+                lblNom.Top = 10;
+                lblNom.Width = carte.Width - 44;
                 lblNom.Height = 20;
 
                 Label lblSousTexte = new Label();
                 lblSousTexte.Text = "Toucher pour voir les détails";
                 lblSousTexte.Font = Theme.PolicePetite;
                 lblSousTexte.ForeColor = Theme.CouleurTexteSecondaire;
-                lblSousTexte.Left = 10;
-                lblSousTexte.Top = 28;
-                lblSousTexte.Width = carte.Width - 40;
+                lblSousTexte.BackColor = Theme.CouleurCarte;
+                lblSousTexte.Left = 14;
+                lblSousTexte.Top = 30;
+                lblSousTexte.Width = carte.Width - 44;
                 lblSousTexte.Height = 16;
 
                 Label lblChevron = new Label();
                 lblChevron.Text = "›";
                 lblChevron.Font = new Font("Tahoma", 14, FontStyle.Bold);
                 lblChevron.ForeColor = Theme.CouleurAccent;
+                lblChevron.BackColor = Theme.CouleurCarte;
                 lblChevron.Width = 24;
                 lblChevron.Height = hauteurItem - 20;
-                lblChevron.Left = carte.Width - 28;
+                lblChevron.Left = carte.Width - 30;
                 lblChevron.Top = 10;
                 lblChevron.TextAlign = ContentAlignment.TopCenter;
 
+                MouseEventHandler surAppui = delegate(object s, MouseEventArgs me)
+                {
+                    carteEnfoncee = true;
+                    carte.Invalidate();
+
+                    lblNom.BackColor = Theme.CouleurCartePressee;
+                    lblSousTexte.BackColor = Theme.CouleurCartePressee;
+                    lblChevron.BackColor = Theme.CouleurCartePressee;
+                };
+                MouseEventHandler surRelache = delegate(object s, MouseEventArgs ev)
+                {
+                    carteEnfoncee = false;
+                    carte.Invalidate();
+
+                    lblNom.BackColor = Theme.CouleurCarte;
+                    lblSousTexte.BackColor = Theme.CouleurCarte;
+                    lblChevron.BackColor = Theme.CouleurCarte;
+                };
                 EventHandler ouvrirDetails = delegate(object s, EventArgs ev)
                 {
                     OuvrirPageDetails(app);
                 };
+
+                carte.MouseDown += surAppui;
+                carte.MouseUp += surRelache;
 
                 carte.Click += ouvrirDetails;
                 lblNom.Click += ouvrirDetails;
@@ -592,7 +696,9 @@ namespace API_diag
             _appCourante = app;
 
             labelNomDetails.Text = app.name;
+            labelNomDetails.BackColor = Theme.CouleurCarte;
             labelIdDetails.Text = "ID : " + app.id;
+            labelIdDetails.BackColor = Theme.CouleurCarte;
 
             progressTelechargement.Visible = false;
             progressTelechargement.Value = 0;
@@ -760,6 +866,7 @@ namespace API_diag
     {
         public string id;
         public string name;
+        public string provider;
     }
 
     public class ApiResponse

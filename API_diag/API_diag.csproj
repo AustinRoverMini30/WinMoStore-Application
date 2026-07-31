@@ -75,6 +75,7 @@
       <AutoGen>True</AutoGen>
       <DependentUpon>Resources.resx</DependentUpon>
     </Compile>
+    <Compile Include="RenduArrondi.cs" />
     <Compile Include="Theme.cs" />
   </ItemGroup>
   <ItemGroup>
