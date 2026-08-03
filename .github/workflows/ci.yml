@@ -19,7 +19,7 @@ jobs:
       - name: Zip dist folder
         run: |
           cd API_diag/bin/Release
-          zip -r ../winmostore-${{ github.ref_name }}.zip .
+          zip -r "$GITHUB_WORKSPACE/winmostore-${{ github.ref_name }}.zip" .
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
