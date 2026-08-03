@@ -7,6 +7,7 @@ using System.Net;
 using System.Threading;
 using System.Diagnostics;
 using CodeBetter.Json;
+using System.Reflection;
 
 namespace API_diag
 {
@@ -120,7 +121,7 @@ namespace API_diag
             labelHeaderListe.Font = Theme.PoliceEntete;
 
             labelSousTitreListe = new Label();
-            labelSousTitreListe.Text = "Applications disponibles";
+            labelSousTitreListe.Text = "v" + ObtenirVersionApplication();
             labelSousTitreListe.ForeColor = Theme.CouleurTexteSecondaire;
             labelSousTitreListe.Font = Theme.PoliceSousTitre;
 
@@ -860,6 +861,12 @@ namespace API_diag
         private void menuItem2_Click(object sender, EventArgs e)
         {
             Application.Exit();
+        }
+
+        private string ObtenirVersionApplication()
+        {
+            Version v = Assembly.GetExecutingAssembly().GetName().Version;
+            return v.Major + "." + v.Minor + "." + v.Build;
         }
     }
 
