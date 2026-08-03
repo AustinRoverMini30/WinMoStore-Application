@@ -27,6 +27,10 @@ namespace API_diag
         private Panel panelPilleRecherche;
         private TextBox textBoxRecherche;
         private Button buttonRechercher;
+        private Panel panelMiseAJour;
+        private Button buttonMiseAJour;
+        private ProgressBar progressMiseAJour;
+        private Label labelStatutMiseAJour;
         private Label label1;
         private Panel panel1;
         private MainMenu mainMenu1;
@@ -49,9 +53,12 @@ namespace API_diag
         private bool chargementEnCours = false;
         private bool telechargementEnCours = false;
         private bool verificationSanteEnCours = false;
+        private bool verificationMiseAJourEnCours = false;
+        private bool telechargementMiseAJourEnCours = false;
 
         private ApplicationApi _appCourante;
         private ApplicationApi[] _dernieresApplications;
+        private string _versionDisponibleMiseAJour;
         private Color _couleurSante = Theme.CouleurSanteInconnue;
         private System.Windows.Forms.Timer minuterieSante;
 
@@ -59,6 +66,9 @@ namespace API_diag
         private delegate void ProgressionTelechargementDelegate(int pourcentage);
         private delegate void TelechargementTermineDelegate(string cheminFichier, string erreur);
         private delegate void SanteVerifieeDelegate(bool enLigne);
+        private delegate void MiseAJourVerifieeDelegate(bool disponible, string version);
+        private delegate void ProgressionMiseAJourDelegate(int pourcentage);
+        private delegate void TelechargementMiseAJourTermineDelegate(string cheminFichier, string erreur);
 
         public WinMoStore()
         {
@@ -66,6 +76,7 @@ namespace API_diag
             PositionnerControles();
             this.Resize += new EventHandler(WinMoStore_Resize);
             InitialiserSurveillanceSante();
+            VerifierMiseAJour();
         }
 
         private void WinMoStore_Resize(object sender, EventArgs e)
@@ -100,9 +111,8 @@ namespace API_diag
             // ===================== PAGE LISTE =====================
 
             panelHeaderListe = new Panel();
-            panelHeaderListe.BackColor = Theme.CouleurFond; // plus de bandeau plein : header à plat, façon appli moderne
+            panelHeaderListe.BackColor = Theme.CouleurFond;
 
-            // "Logo" fait maison : carré arrondi accent avec une initiale, en l'absence d'icône réelle.
             logoMark = new Panel();
             logoMark.BackColor = Theme.CouleurFond;
             logoMark.Paint += new PaintEventHandler(LogoMark_Paint);
@@ -111,7 +121,7 @@ namespace API_diag
             labelLogo.Text = "W";
             labelLogo.Font = Theme.PoliceLogo;
             labelLogo.ForeColor = Theme.CouleurTexteClair;
-            labelLogo.BackColor = Theme.CouleurAccent; // même couleur que le fond dessiné, pas de bord visible
+            labelLogo.BackColor = Theme.CouleurAccent;
             labelLogo.TextAlign = ContentAlignment.TopCenter;
             logoMark.Controls.Add(labelLogo);
 
@@ -139,7 +149,7 @@ namespace API_diag
             panelRecherche.BackColor = Theme.CouleurFond;
 
             panelPilleRecherche = new Panel();
-            panelPilleRecherche.BackColor = Theme.CouleurFond; // blend avec le fond pour les coins découpés
+            panelPilleRecherche.BackColor = Theme.CouleurFond;
             panelPilleRecherche.Paint += new PaintEventHandler(PilleRecherche_Paint);
 
             textBoxRecherche = new TextBox();
@@ -160,6 +170,32 @@ namespace API_diag
 
             panelRecherche.Controls.Add(panelPilleRecherche);
             panelRecherche.Controls.Add(buttonRechercher);
+
+            // --- Bloc "Mise à jour disponible" : masqué tant qu'aucune MAJ n'est détectée ---
+            panelMiseAJour = new Panel();
+            panelMiseAJour.BackColor = Theme.CouleurFond;
+            panelMiseAJour.Visible = false;
+
+            buttonMiseAJour = new Button();
+            buttonMiseAJour.Text = "Mise à jour disponible";
+            buttonMiseAJour.Font = Theme.PoliceBouton;
+            buttonMiseAJour.ForeColor = Theme.CouleurTexteClair;
+            buttonMiseAJour.BackColor = Theme.CouleurAccent;
+            buttonMiseAJour.Click += new EventHandler(buttonMiseAJour_Click);
+
+            progressMiseAJour = new ProgressBar();
+            progressMiseAJour.Minimum = 0;
+            progressMiseAJour.Maximum = 100;
+            progressMiseAJour.Visible = false;
+
+            labelStatutMiseAJour = new Label();
+            labelStatutMiseAJour.Font = Theme.PolicePetite;
+            labelStatutMiseAJour.ForeColor = Theme.CouleurTexteSecondaire;
+            labelStatutMiseAJour.Visible = false;
+
+            panelMiseAJour.Controls.Add(buttonMiseAJour);
+            panelMiseAJour.Controls.Add(progressMiseAJour);
+            panelMiseAJour.Controls.Add(labelStatutMiseAJour);
 
             label1 = new Label();
             label1.ForeColor = Theme.CouleurTexteSecondaire;
@@ -235,6 +271,7 @@ namespace API_diag
             this.Controls.Add(panelDetails);
             this.Controls.Add(panel1);
             this.Controls.Add(label1);
+            this.Controls.Add(panelMiseAJour);
             this.Controls.Add(panelRecherche);
             this.Controls.Add(panelHeaderListe);
         }
@@ -295,8 +332,33 @@ namespace API_diag
             textBoxRecherche.Width = panelPilleRecherche.Width - 24;
             textBoxRecherche.Height = 20;
 
+            // Bloc mise à jour : ne réserve de la place que s'il est visible.
+            panelMiseAJour.Left = 0;
+            panelMiseAJour.Top = panelRecherche.Top + panelRecherche.Height;
+            panelMiseAJour.Width = largeur;
+            panelMiseAJour.Height = 78;
+
+            buttonMiseAJour.Left = 8;
+            buttonMiseAJour.Top = 6;
+            buttonMiseAJour.Width = largeur - 16;
+            buttonMiseAJour.Height = 34;
+
+            progressMiseAJour.Left = 8;
+            progressMiseAJour.Top = buttonMiseAJour.Top + buttonMiseAJour.Height + 6;
+            progressMiseAJour.Width = largeur - 16;
+            progressMiseAJour.Height = 16;
+
+            labelStatutMiseAJour.Left = 8;
+            labelStatutMiseAJour.Top = progressMiseAJour.Top + progressMiseAJour.Height + 4;
+            labelStatutMiseAJour.Width = largeur - 16;
+            labelStatutMiseAJour.Height = 16;
+
+            int topApresRecherche = panelMiseAJour.Visible
+                ? panelMiseAJour.Top + panelMiseAJour.Height
+                : panelRecherche.Top + panelRecherche.Height;
+
             label1.Left = 8;
-            label1.Top = panelRecherche.Top + panelRecherche.Height + 4;
+            label1.Top = topApresRecherche + 4;
             label1.Width = largeur - 16;
             label1.Height = 18;
 
@@ -357,7 +419,6 @@ namespace API_diag
             buttonRetour.Height = 36;
         }
 
-        // Fond arrondi accent du logo maison ("W").
         private void LogoMark_Paint(object sender, PaintEventArgs pe)
         {
             Panel p = (Panel)sender;
@@ -367,7 +428,6 @@ namespace API_diag
             }
         }
 
-        // Pilule de recherche : coins totalement arrondis (rayon = moitié de la hauteur).
         private void PilleRecherche_Paint(object sender, PaintEventArgs pe)
         {
             Panel p = (Panel)sender;
@@ -377,7 +437,6 @@ namespace API_diag
             }
         }
 
-        // Carte "surface élevée" à coins arrondis, utilisée sur la page détails.
         private void CarteInfo_Paint(object sender, PaintEventArgs pe)
         {
             Panel p = (Panel)sender;
@@ -449,6 +508,200 @@ namespace API_diag
             verificationSanteEnCours = false;
             _couleurSante = enLigne ? Theme.CouleurSanteOk : Theme.CouleurSanteKo;
             pastilleSante.Invalidate();
+        }
+
+        #endregion
+
+        #region Vérification de mise à jour de l'application
+
+        // Interroge /api/getAppVersion sur un thread séparé, compare à la version locale,
+        // et affiche le bouton de mise à jour uniquement si une version plus récente existe.
+        private void VerifierMiseAJour()
+        {
+            if (verificationMiseAJourEnCours) return;
+            verificationMiseAJourEnCours = true;
+
+            Thread threadMaj = new Thread(new ThreadStart(delegate
+            {
+                bool disponible = false;
+                string versionDistante = null;
+
+                try
+                {
+                    string json = GetApiData(ApiBaseUrl + "/api/getAppVersion");
+                    AppVersionResponse reponse = Converter.Deserialize<AppVersionResponse>(json);
+
+                    if (reponse != null && reponse.success && reponse.version != null && !string.IsNullOrEmpty(reponse.version))
+                    {
+                        versionDistante = reponse.version;
+                        string versionLocale = ObtenirVersionApplication();
+                        disponible = CompareVersions(versionDistante, versionLocale) > 0;
+                    }
+                }
+                catch
+                {
+                    // Échec silencieux : une vérification de mise à jour ratée ne doit pas
+                    // déranger l'utilisateur avec un message d'erreur au lancement de l'app.
+                    disponible = false;
+                }
+
+                this.Invoke(new MiseAJourVerifieeDelegate(MiseAJourVerifiee), new object[] { disponible, versionDistante });
+            }));
+
+            threadMaj.IsBackground = true;
+            threadMaj.Start();
+        }
+
+        private void MiseAJourVerifiee(bool disponible, string version)
+        {
+            verificationMiseAJourEnCours = false;
+            _versionDisponibleMiseAJour = version;
+
+            if (disponible)
+            {
+                buttonMiseAJour.Text = "Mise à jour disponible (v" + version + ")";
+                buttonMiseAJour.Enabled = true;
+                progressMiseAJour.Visible = false;
+                progressMiseAJour.Value = 0;
+                labelStatutMiseAJour.Visible = false;
+            }
+
+            panelMiseAJour.Visible = disponible;
+
+            // Reflow nécessaire : le bloc de mise à jour occupe désormais de la place (ou plus).
+            PositionnerControles();
+        }
+
+        // Compare deux versions "Major.Minor.Build" composant par composant.
+        // Retourne > 0 si a > b, < 0 si a < b, 0 si égales.
+        private static int CompareVersions(string a, string b)
+        {
+            int[] pa = ParseVersionParts(a);
+            int[] pb = ParseVersionParts(b);
+
+            for (int i = 0; i < 3; i++)
+            {
+                if (pa[i] != pb[i]) return pa[i] - pb[i];
+            }
+            return 0;
+        }
+
+        private static int[] ParseVersionParts(string v)
+        {
+            int[] parts = new int[3];
+            if (string.IsNullOrEmpty(v)) return parts;
+
+            string[] segments = v.Split('.');
+            for (int i = 0; i < 3 && i < segments.Length; i++)
+            {
+                try
+                {
+                    parts[i] = int.Parse(segments[i]);
+                }
+                catch
+                {
+                    parts[i] = 0;
+                }
+            }
+            return parts;
+        }
+
+        private void buttonMiseAJour_Click(object sender, EventArgs e)
+        {
+            if (telechargementMiseAJourEnCours) return;
+
+            telechargementMiseAJourEnCours = true;
+            buttonMiseAJour.Enabled = false;
+            progressMiseAJour.Visible = true;
+            progressMiseAJour.Value = 0;
+            labelStatutMiseAJour.Visible = true;
+            labelStatutMiseAJour.Text = "Démarrage...";
+
+            string urlZip = ApiBaseUrl + "/api/updateAppCab";
+            const string nomFichier = "WinMoStore.cab";
+
+            Thread threadTelechargementMaj = new Thread(new ThreadStart(delegate
+            {
+                string cheminFichier = null;
+                string erreur = null;
+
+                try
+                {
+                    cheminFichier = TelechargerFichierMiseAJour(urlZip, nomFichier);
+                }
+                catch (Exception ex)
+                {
+                    erreur = ex.Message;
+                }
+
+                this.Invoke(new TelechargementMiseAJourTermineDelegate(TelechargementMiseAJourTermine), new object[] { cheminFichier, erreur });
+            }));
+
+            threadTelechargementMaj.Start();
+        }
+
+        private string TelechargerFichierMiseAJour(string url, string nomFichier)
+        {
+            HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
+            request.Method = "GET";
+
+            using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
+            {
+                long tailleTotale = response.ContentLength;
+
+                string dossierDestination = "\\My Documents";
+                if (!Directory.Exists(dossierDestination))
+                {
+                    dossierDestination = "\\";
+                }
+                string cheminComplet = Path.Combine(dossierDestination, nomFichier);
+
+                using (Stream fluxReseau = response.GetResponseStream())
+                using (FileStream fluxFichier = new FileStream(cheminComplet, FileMode.Create, FileAccess.Write))
+                {
+                    byte[] buffer = new byte[4096];
+                    long totalLu = 0;
+                    int lu;
+
+                    while ((lu = fluxReseau.Read(buffer, 0, buffer.Length)) > 0)
+                    {
+                        fluxFichier.Write(buffer, 0, lu);
+                        totalLu += lu;
+
+                        if (tailleTotale > 0)
+                        {
+                            int pourcentage = (int)((totalLu * 100L) / tailleTotale);
+                            this.Invoke(new ProgressionMiseAJourDelegate(MettreAJourProgressionMiseAJour), new object[] { pourcentage });
+                        }
+                    }
+                }
+
+                return cheminComplet;
+            }
+        }
+
+        private void MettreAJourProgressionMiseAJour(int pourcentage)
+        {
+            if (pourcentage < 0) pourcentage = 0;
+            if (pourcentage > 100) pourcentage = 100;
+            progressMiseAJour.Value = pourcentage;
+            labelStatutMiseAJour.Text = pourcentage + " %";
+        }
+
+        private void TelechargementMiseAJourTermine(string cheminFichier, string erreur)
+        {
+            telechargementMiseAJourEnCours = false;
+            buttonMiseAJour.Enabled = true;
+
+            if (erreur != null)
+            {
+                labelStatutMiseAJour.Text = "Échec du téléchargement.";
+                AfficherAvertissement("Le téléchargement de la mise à jour a échoué.\n\n" + erreur);
+                return;
+            }
+
+            progressMiseAJour.Value = 100;
+            labelStatutMiseAJour.Text = "Téléchargé : " + cheminFichier;
         }
 
         #endregion
@@ -603,14 +856,14 @@ namespace API_diag
             for (int i = 0; i < apps.Length; i++)
             {
                 ApplicationApi app = apps[i];
-                bool carteEnfoncee = false; // état local capturé par les délégués ci-dessous
+                bool carteEnfoncee = false;
 
                 Panel carte = new Panel();
                 carte.Left = 8;
                 carte.Top = i * (hauteurItem + marge) + marge;
                 carte.Width = panel1.ClientSize.Width - 30;
                 carte.Height = hauteurItem;
-                carte.BackColor = Theme.CouleurFond; // blend avec le fond pour les coins découpés
+                carte.BackColor = Theme.CouleurFond;
 
                 PaintEventHandler carteArrondiePaint = delegate(object s, PaintEventArgs pe)
                 {
@@ -712,6 +965,7 @@ namespace API_diag
             panel1.Visible = false;
             panelHeaderListe.Visible = false;
             panelRecherche.Visible = false;
+            panelMiseAJour.Visible = false;
             label1.Visible = false;
             panelDetails.Visible = true;
             this.ResumeLayout();
@@ -840,7 +1094,9 @@ namespace API_diag
             panel1.Visible = true;
             panelHeaderListe.Visible = true;
             panelRecherche.Visible = true;
+            panelMiseAJour.Visible = !string.IsNullOrEmpty(_versionDisponibleMiseAJour) && CompareVersions(_versionDisponibleMiseAJour, ObtenirVersionApplication()) > 0;
             label1.Visible = true;
+            PositionnerControles();
             this.ResumeLayout();
         }
 
@@ -882,5 +1138,12 @@ namespace API_diag
         public bool success;
         public string message;
         public ApplicationApi[] data;
+    }
+
+    public class AppVersionResponse
+    {
+        public bool success;
+        public string version;
+        public string publishedAt;
     }
 }
