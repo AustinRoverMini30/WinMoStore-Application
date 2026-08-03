@@ -21,9 +21,16 @@ jobs:
           cd API_diag/bin/Release
           zip -r "$GITHUB_WORKSPACE/winmostore-${{ github.ref_name }}.zip" .
 
+      - name: Copy CAB file
+        run: |
+          cp "WinMoStore deploy/Release/WinMoStore deploy.cab" \
+             "$GITHUB_WORKSPACE/WinMoStore-deploy-${{ github.ref_name }}.cab"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           name: ${{ github.ref_name }}
           generate_release_notes: true
-          files: winmostore-${{ github.ref_name }}.zip
+          files: |
+            winmostore-${{ github.ref_name }}.zip
+            WinMoStore-deploy-${{ github.ref_name }}.cab
