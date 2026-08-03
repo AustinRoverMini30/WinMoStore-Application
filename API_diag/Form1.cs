@@ -59,6 +59,7 @@ namespace API_diag
         private ApplicationApi _appCourante;
         private ApplicationApi[] _dernieresApplications;
         private string _versionDisponibleMiseAJour;
+        private string _cheminMiseAJourTelechargee; // non-null dès que le .cab de mise à jour est téléchargé
         private Color _couleurSante = Theme.CouleurSanteInconnue;
         private System.Windows.Forms.Timer minuterieSante;
 
@@ -332,7 +333,6 @@ namespace API_diag
             textBoxRecherche.Width = panelPilleRecherche.Width - 24;
             textBoxRecherche.Height = 20;
 
-            // Bloc mise à jour : ne réserve de la place que s'il est visible.
             panelMiseAJour.Left = 0;
             panelMiseAJour.Top = panelRecherche.Top + panelRecherche.Height;
             panelMiseAJour.Width = largeur;
@@ -514,8 +514,6 @@ namespace API_diag
 
         #region Vérification de mise à jour de l'application
 
-        // Interroge /api/getAppVersion sur un thread séparé, compare à la version locale,
-        // et affiche le bouton de mise à jour uniquement si une version plus récente existe.
         private void VerifierMiseAJour()
         {
             if (verificationMiseAJourEnCours) return;
@@ -531,7 +529,7 @@ namespace API_diag
                     string json = GetApiData(ApiBaseUrl + "/api/getAppVersion");
                     AppVersionResponse reponse = Converter.Deserialize<AppVersionResponse>(json);
 
-                    if (reponse != null && reponse.success && reponse.version != null && !string.IsNullOrEmpty(reponse.version))
+                    if (reponse != null && reponse.success && !string.IsNullOrEmpty(reponse.version))
                     {
                         versionDistante = reponse.version;
                         string versionLocale = ObtenirVersionApplication();
@@ -540,8 +538,6 @@ namespace API_diag
                 }
                 catch
                 {
-                    // Échec silencieux : une vérification de mise à jour ratée ne doit pas
-                    // déranger l'utilisateur avec un message d'erreur au lancement de l'app.
                     disponible = false;
                 }
 
@@ -564,16 +560,14 @@ namespace API_diag
                 progressMiseAJour.Visible = false;
                 progressMiseAJour.Value = 0;
                 labelStatutMiseAJour.Visible = false;
+                _cheminMiseAJourTelechargee = null; // nouvelle version détectée : on repart d'un état "à télécharger"
             }
 
             panelMiseAJour.Visible = disponible;
 
-            // Reflow nécessaire : le bloc de mise à jour occupe désormais de la place (ou plus).
             PositionnerControles();
         }
 
-        // Compare deux versions "Major.Minor.Build" composant par composant.
-        // Retourne > 0 si a > b, < 0 si a < b, 0 si égales.
         private static int CompareVersions(string a, string b)
         {
             int[] pa = ParseVersionParts(a);
@@ -606,18 +600,26 @@ namespace API_diag
             return parts;
         }
 
+        // Bascule entre "télécharger" et "installer" selon qu'un .cab a déjà été téléchargé ou non.
         private void buttonMiseAJour_Click(object sender, EventArgs e)
         {
+            if (_cheminMiseAJourTelechargee != null)
+            {
+                InstallerMiseAJour();
+                return;
+            }
+
             if (telechargementMiseAJourEnCours) return;
 
             telechargementMiseAJourEnCours = true;
             buttonMiseAJour.Enabled = false;
+            buttonMiseAJour.Text = "Téléchargement...";
             progressMiseAJour.Visible = true;
             progressMiseAJour.Value = 0;
             labelStatutMiseAJour.Visible = true;
             labelStatutMiseAJour.Text = "Démarrage...";
 
-            string urlZip = ApiBaseUrl + "/api/updateAppCab";
+            string urlCab = ApiBaseUrl + "/api/updateAppCab";
             const string nomFichier = "WinMoStore.cab";
 
             Thread threadTelechargementMaj = new Thread(new ThreadStart(delegate
@@ -627,7 +629,7 @@ namespace API_diag
 
                 try
                 {
-                    cheminFichier = TelechargerFichierMiseAJour(urlZip, nomFichier);
+                    cheminFichier = TelechargerFichierMiseAJour(urlCab, nomFichier);
                 }
                 catch (Exception ex)
                 {
@@ -691,17 +693,38 @@ namespace API_diag
         private void TelechargementMiseAJourTermine(string cheminFichier, string erreur)
         {
             telechargementMiseAJourEnCours = false;
-            buttonMiseAJour.Enabled = true;
 
             if (erreur != null)
             {
+                buttonMiseAJour.Enabled = true;
+                buttonMiseAJour.Text = "Mise à jour disponible (v" + _versionDisponibleMiseAJour + ")";
                 labelStatutMiseAJour.Text = "Échec du téléchargement.";
                 AfficherAvertissement("Le téléchargement de la mise à jour a échoué.\n\n" + erreur);
                 return;
             }
 
+            _cheminMiseAJourTelechargee = cheminFichier;
+
             progressMiseAJour.Value = 100;
             labelStatutMiseAJour.Text = "Téléchargé : " + cheminFichier;
+
+            buttonMiseAJour.Enabled = true;
+            buttonMiseAJour.Text = "Installer";
+        }
+
+        // Lance l'installeur natif sur le .cab téléchargé, puis ferme l'application
+        // pour laisser la main à wceload.exe sans conflit avec le processus courant.
+        private void InstallerMiseAJour()
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo(_cheminMiseAJourTelechargee, ""));
+                Application.Exit();
+            }
+            catch (Exception ex)
+            {
+                AfficherAvertissement("Le fichier a été téléchargé (" + _cheminMiseAJourTelechargee + "), mais son installation automatique a échoué.\n\n" + ex.Message + "\n\nVous pouvez l'installer manuellement depuis l'explorateur de fichiers.");
+            }
         }
 
         #endregion
