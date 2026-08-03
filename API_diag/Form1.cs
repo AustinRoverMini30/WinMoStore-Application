@@ -12,7 +12,8 @@ namespace API_diag
 {
     public partial class WinMoStore : Form
     {
-        private const string ApiBaseUrl = "http://192.168.1.102:3000";
+        //private const string ApiBaseUrl = "http://192.168.1.102:3000";
+        private const string ApiBaseUrl = "http://vps-f5acc160.vps.ovh.net:3000";
 
         // --- Page liste ---
         private Panel panelHeaderListe;
@@ -606,7 +607,7 @@ namespace API_diag
                 Panel carte = new Panel();
                 carte.Left = 8;
                 carte.Top = i * (hauteurItem + marge) + marge;
-                carte.Width = panel1.ClientSize.Width - 16;
+                carte.Width = panel1.ClientSize.Width - 30;
                 carte.Height = hauteurItem;
                 carte.BackColor = Theme.CouleurFond; // blend avec le fond pour les coins découpés
 
@@ -728,7 +729,7 @@ namespace API_diag
             labelStatutTelechargement.Text = "Démarrage...";
 
             string nomFichier = _appCourante.name + ".cab";
-            string urlCab = ApiBaseUrl + "/cabs/" + _appCourante.name + ".cab";
+            string urlCab = ApiBaseUrl + "/cabs/" + EncoderComposantUrl(_appCourante.name) + ".cab";
 
             Thread threadTelechargement = new Thread(new ThreadStart(delegate
             {
@@ -741,7 +742,7 @@ namespace API_diag
                 }
                 catch (Exception ex)
                 {
-                    erreur = ex.Message;
+                    erreur = ex.Message + urlCab;
                 }
 
                 this.Invoke(new TelechargementTermineDelegate(TelechargementTermine), new object[] { cheminFichier, erreur });
