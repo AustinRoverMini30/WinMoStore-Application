@@ -36,7 +36,7 @@ namespace API_diag
 
         public static void Charger(string url, string idApplication, Control controleCible, IconeChargeeCallback callback)
         {
-            string dossierCache = ObtenirDossierApplication();
+            string dossierCache = Path.Combine(ObtenirDossierApplication(), "IconCache");
             if (!Directory.Exists(dossierCache))
             {
                 try { Directory.CreateDirectory(dossierCache); }
