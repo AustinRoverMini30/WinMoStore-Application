@@ -898,14 +898,32 @@ namespace API_diag
                 };
                 carte.Paint += carteArrondiePaint;
 
+                PictureBox pbIcone = new PictureBox();
+                pbIcone.Left = 10;
+                pbIcone.Top = (carte.Height - 32) / 2;
+                pbIcone.Width = 32;
+                pbIcone.Height = 32;
+                pbIcone.SizeMode = PictureBoxSizeMode.StretchImage;
+                pbIcone.BackColor = Theme.CouleurCarte;
+                carte.Controls.Add(pbIcone);
+
+                if (!string.IsNullOrEmpty(app.icon))
+                {
+                    string urlIcone = ApiBaseUrl + "/icons/" + app.icon;
+                    IconLoader.Charger(urlIcone, app.id, pbIcone, delegate(Bitmap bmp)
+                    {
+                        pbIcone.Image = bmp;
+                    });
+                }
+
                 Label lblNom = new Label();
                 lblNom.Text = app.name;
                 lblNom.Font = Theme.PoliceNormaleGrasse;
                 lblNom.ForeColor = Theme.CouleurTexte;
                 lblNom.BackColor = Theme.CouleurCarte;
-                lblNom.Left = 14;
+                lblNom.Left = 14 + 32 + 10;
                 lblNom.Top = 10;
-                lblNom.Width = carte.Width - 44;
+                lblNom.Width = carte.Width - 100;
                 lblNom.Height = 20;
 
                 Label lblSousTexte = new Label();
@@ -913,9 +931,9 @@ namespace API_diag
                 lblSousTexte.Font = Theme.PolicePetite;
                 lblSousTexte.ForeColor = Theme.CouleurTexteSecondaire;
                 lblSousTexte.BackColor = Theme.CouleurCarte;
-                lblSousTexte.Left = 14;
+                lblSousTexte.Left = lblNom.Left;
                 lblSousTexte.Top = 30;
-                lblSousTexte.Width = carte.Width - 44;
+                lblSousTexte.Width = lblNom.Width;
                 lblSousTexte.Height = 16;
 
                 Label lblChevron = new Label();
@@ -1154,6 +1172,7 @@ namespace API_diag
         public string id;
         public string name;
         public string provider;
+        public string icon;
     }
 
     public class ApiResponse
