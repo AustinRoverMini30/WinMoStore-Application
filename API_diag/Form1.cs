@@ -8,6 +8,7 @@ using System.Threading;
 using System.Diagnostics;
 using CodeBetter.Json;
 using System.Reflection;
+using System.Drawing.Imaging;
 
 namespace API_diag
 {
@@ -70,6 +71,9 @@ namespace API_diag
         private delegate void MiseAJourVerifieeDelegate(bool disponible, string version);
         private delegate void ProgressionMiseAJourDelegate(int pourcentage);
         private delegate void TelechargementMiseAJourTermineDelegate(string cheminFichier, string erreur);
+
+        protected Bitmap backBuffer;
+        protected Image constantAlphaImage;
 
         public WinMoStore()
         {
@@ -900,11 +904,24 @@ namespace API_diag
 
                 PictureBox pbIcone = new PictureBox();
                 pbIcone.Left = 10;
-                pbIcone.Top = (carte.Height - 32) / 2;
+                pbIcone.Top = (hauteurItem - 32) / 2;
                 pbIcone.Width = 32;
                 pbIcone.Height = 32;
-                pbIcone.SizeMode = PictureBoxSizeMode.StretchImage;
                 pbIcone.BackColor = Theme.CouleurCarte;
+
+                Bitmap bmpIcone = null; // rempli une fois le téléchargement terminé, capturé par la closure ci-dessous
+
+                pbIcone.Paint += delegate(object s, PaintEventArgs pe)
+                {
+                    if (bmpIcone == null) return;
+
+                    ImageAttributes attr = new ImageAttributes();
+                    attr.SetColorKey(Color.Magenta, Color.Magenta);
+
+                    Rectangle destRect = new Rectangle(0, 0, pbIcone.Width, pbIcone.Height);
+                    pe.Graphics.DrawImage(bmpIcone, destRect, 0, 0, bmpIcone.Width, bmpIcone.Height, GraphicsUnit.Pixel, attr);
+                };
+
                 carte.Controls.Add(pbIcone);
 
                 if (!string.IsNullOrEmpty(app.icon))
@@ -912,7 +929,8 @@ namespace API_diag
                     string urlIcone = ApiBaseUrl + "/icons/" + app.icon;
                     IconLoader.Charger(urlIcone, app.id, pbIcone, delegate(Bitmap bmp)
                     {
-                        pbIcone.Image = bmp;
+                        bmpIcone = bmp;
+                        pbIcone.Invalidate();
                     });
                 }
 
