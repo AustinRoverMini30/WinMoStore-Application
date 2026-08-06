@@ -23,7 +23,7 @@ jobs:
 
       - name: Copy CAB file
         run: |
-          cp "WinMoStore deploy/Release/WinMoStore deploy.CAB" \
+          cp "WinMoStore deploy/Release/WinMoStore deploy.cab" \
              "$GITHUB_WORKSPACE/WinMoStore-deploy-${{ github.ref_name }}.cab"
 
       - name: Create GitHub Release
