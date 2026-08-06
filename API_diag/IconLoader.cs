@@ -8,120 +8,119 @@ using System.Windows.Forms;
 
 namespace API_diag
 {
-    public delegate void IconeChargeeCallback(Bitmap bitmap);
+    public delegate void IconLoadedCallback(Bitmap bitmap);
 
-    // Gère le téléchargement, la mise en cache disque et la limitation de concurrence
-    // pour les icônes d'applications - conçu pour ne jamais bloquer l'UI ni saturer
-    // un appareil WinMo lent.
+    // Handles downloading, disk caching, and concurrency limiting for application icons -
+    // designed to never block the UI or overload a slow WinMo device.
     public static class IconLoader
     {
-        private static readonly object _verrou = new object();
-        private static readonly Queue<TacheIcone> _file = new Queue<TacheIcone>();
-        private static int _threadsActifs = 0;
-        private const int MaxThreadsSimultanes = 2;
+        private static readonly object _lock = new object();
+        private static readonly Queue<IconTask> _queue = new Queue<IconTask>();
+        private static int _activeThreads = 0;
+        private const int MaxConcurrentThreads = 2;
 
-        private class TacheIcone
+        private class IconTask
         {
             public string Url;
-            public string CheminCache;
-            public Control ControleCible;
-            public IconeChargeeCallback Callback;
+            public string CachePath;
+            public Control TargetControl;
+            public IconLoadedCallback Callback;
         }
 
-        private static string ObtenirDossierApplication()
+        private static string GetApplicationFolder()
         {
-            string cheminAssembly = System.Reflection.Assembly.GetExecutingAssembly().GetName().CodeBase;
-            return Path.GetDirectoryName(cheminAssembly);
+            string assemblyPath = System.Reflection.Assembly.GetExecutingAssembly().GetName().CodeBase;
+            return Path.GetDirectoryName(assemblyPath);
         }
 
-        public static void Charger(string url, string idApplication, Control controleCible, IconeChargeeCallback callback)
+        public static void Load(string url, string applicationId, Control targetControl, IconLoadedCallback callback)
         {
-            string dossierCache = Path.Combine(ObtenirDossierApplication(), "IconCache");
-            if (!Directory.Exists(dossierCache))
+            string cacheFolder = Path.Combine(GetApplicationFolder(), "IconCache");
+            if (!Directory.Exists(cacheFolder))
             {
-                try { Directory.CreateDirectory(dossierCache); }
-                catch { /* si la création échoue, on continue sans cache disque */ }
+                try { Directory.CreateDirectory(cacheFolder); }
+                catch { /* if creation fails, continue without disk cache */ }
             }
-            string cheminCache = Path.Combine(dossierCache, idApplication + ".icon");
+            string cachePath = Path.Combine(cacheFolder, applicationId + ".icon");
 
-            if (File.Exists(cheminCache))
+            if (File.Exists(cachePath))
             {
-                // Déjà en cache : lecture disque sur un thread séparé (le décodage
-                // de l'image reste coûteux même sans réseau, on évite de figer l'UI).
+                // Already cached: read from disk on a separate thread (image decoding
+                // is still costly even without network, so we avoid freezing the UI).
                 Thread t = new Thread(new ThreadStart(delegate
                 {
                     Bitmap bmp = null;
-                    try { bmp = new Bitmap(cheminCache); }
+                    try { bmp = new Bitmap(cachePath); }
                     catch { bmp = null; }
-                    LivrerResultat(controleCible, callback, bmp);
+                    DeliverResult(targetControl, callback, bmp);
                 }));
                 t.IsBackground = true;
                 t.Start();
                 return;
             }
 
-            TacheIcone tache = new TacheIcone();
-            tache.Url = url;
-            tache.CheminCache = cheminCache;
-            tache.ControleCible = controleCible;
-            tache.Callback = callback;
+            IconTask task = new IconTask();
+            task.Url = url;
+            task.CachePath = cachePath;
+            task.TargetControl = targetControl;
+            task.Callback = callback;
 
-            lock (_verrou)
+            lock (_lock)
             {
-                _file.Enqueue(tache);
-                if (_threadsActifs < MaxThreadsSimultanes)
+                _queue.Enqueue(task);
+                if (_activeThreads < MaxConcurrentThreads)
                 {
-                    _threadsActifs++;
-                    Thread worker = new Thread(new ThreadStart(TraiterFile));
+                    _activeThreads++;
+                    Thread worker = new Thread(new ThreadStart(ProcessQueue));
                     worker.IsBackground = true;
                     worker.Start();
                 }
             }
         }
 
-        private static void TraiterFile()
+        private static void ProcessQueue()
         {
             while (true)
             {
-                TacheIcone tache;
-                lock (_verrou)
+                IconTask task;
+                lock (_lock)
                 {
-                    if (_file.Count == 0)
+                    if (_queue.Count == 0)
                     {
-                        _threadsActifs--;
+                        _activeThreads--;
                         return;
                     }
-                    tache = _file.Dequeue();
+                    task = _queue.Dequeue();
                 }
 
                 Bitmap bmp = null;
                 try
                 {
-                    HttpWebRequest request = (HttpWebRequest)WebRequest.Create(tache.Url);
+                    HttpWebRequest request = (HttpWebRequest)WebRequest.Create(task.Url);
                     request.Method = "GET";
                     request.Timeout = 8000;
 
                     using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
-                    using (Stream flux = response.GetResponseStream())
+                    using (Stream stream = response.GetResponseStream())
                     using (MemoryStream ms = new MemoryStream())
                     {
                         byte[] buffer = new byte[2048];
-                        int lu;
-                        while ((lu = flux.Read(buffer, 0, buffer.Length)) > 0)
+                        int read;
+                        while ((read = stream.Read(buffer, 0, buffer.Length)) > 0)
                         {
-                            ms.Write(buffer, 0, lu);
+                            ms.Write(buffer, 0, read);
                         }
 
-                        byte[] octets = ms.ToArray();
+                        byte[] bytes = ms.ToArray();
 
                         try
                         {
-                            using (FileStream fs = new FileStream(tache.CheminCache, FileMode.Create, FileAccess.Write))
+                            using (FileStream fs = new FileStream(task.CachePath, FileMode.Create, FileAccess.Write))
                             {
-                                fs.Write(octets, 0, octets.Length);
+                                fs.Write(bytes, 0, bytes.Length);
                             }
                         }
-                        catch { /* cache non critique : l'icône reste utilisable même si l'écriture échoue */ }
+                        catch { /* cache is non-critical: the icon still works even if writing fails */ }
 
                         ms.Position = 0;
                         bmp = new Bitmap(ms);
@@ -132,19 +131,19 @@ namespace API_diag
                     bmp = null;
                 }
 
-                LivrerResultat(tache.ControleCible, tache.Callback, bmp);
+                DeliverResult(task.TargetControl, task.Callback, bmp);
             }
         }
 
-        private static void LivrerResultat(Control controleCible, IconeChargeeCallback callback, Bitmap bmp)
+        private static void DeliverResult(Control targetControl, IconLoadedCallback callback, Bitmap bmp)
         {
             if (bmp == null) return;
 
             try
             {
-                controleCible.Invoke(new IconeChargeeCallback(callback), new object[] { bmp });
+                targetControl.Invoke(new IconLoadedCallback(callback), new object[] { bmp });
             }
-            catch { /* le contrôle a pu être détruit entre-temps (changement de page) */ }
+            catch { /* the control may have been destroyed in the meantime (page change) */ }
         }
     }
 }

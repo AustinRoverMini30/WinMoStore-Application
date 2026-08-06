@@ -17,283 +17,280 @@ namespace API_diag
         //private const string ApiBaseUrl = "http://192.168.1.102:3000";
         private const string ApiBaseUrl = "http://vps-f5acc160.vps.ovh.net:3000";
 
-        // --- Page liste ---
-        private Panel panelHeaderListe;
+        // --- List page ---
+        private Panel panelListHeader;
         private Panel logoMark;
         private Label labelLogo;
-        private Label labelHeaderListe;
-        private Label labelSousTitreListe;
-        private Panel pastilleSante;
-        private Panel panelRecherche;
-        private Panel panelPilleRecherche;
-        private TextBox textBoxRecherche;
-        private Button buttonRechercher;
-        private Panel panelMiseAJour;
-        private Button buttonMiseAJour;
-        private ProgressBar progressMiseAJour;
-        private Label labelStatutMiseAJour;
-        private Label label1;
-        private Panel panel1;
-        private MainMenu mainMenu1;
-        private MenuItem menuItem1;
-        private MenuItem menuItem2;
+        private Label labelListTitle;
+        private Label labelListSubtitle;
+        private Panel healthDot;
+        private Panel panelSearch;
+        private Panel panelSearchPill;
+        private TextBox textBoxSearch;
+        private Button buttonSearch;
+        private Panel panelUpdate;
+        private Button buttonUpdate;
+        private ProgressBar progressUpdate;
+        private Label labelUpdateStatus;
+        private Label labelStatus;
+        private Panel panelList;
+        private MainMenu mainMenu;
+        private MenuItem menuItemRefresh;
+        private MenuItem menuItemExit;
 
-        // --- Page détails ---
+        // --- Details page ---
         private Panel panelDetails;
-        private Panel panelHeaderDetails;
-        private Label labelHeaderDetails;
-        private Panel carteInfo;
-        private Label labelNomDetails;
-        private Label labelIdDetails;
-        private Button buttonTelecharger;
-        private Button buttonRetour;
-        private ProgressBar progressTelechargement;
-        private Label labelStatutTelechargement;
+        private Panel panelDetailsHeader;
+        private Label labelDetailsTitle;
+        private Panel infoCard;
+        private Label labelDetailsName;
+        private Label labelDetailsId;
+        private Button buttonDownload;
+        private Button buttonBack;
+        private ProgressBar progressDownload;
+        private Label labelDownloadStatus;
 
-        private const int hauteurEntete = 54;
-        private bool chargementEnCours = false;
-        private bool telechargementEnCours = false;
-        private bool verificationSanteEnCours = false;
-        private bool verificationMiseAJourEnCours = false;
-        private bool telechargementMiseAJourEnCours = false;
+        private const int headerHeight = 54;
+        private bool isLoading = false;
+        private bool isDownloading = false;
+        private bool isCheckingHealth = false;
+        private bool isCheckingUpdate = false;
+        private bool isDownloadingUpdate = false;
 
-        private ApplicationApi _appCourante;
-        private ApplicationApi[] _dernieresApplications;
-        private string _versionDisponibleMiseAJour;
-        private string _cheminMiseAJourTelechargee; // non-null dès que le .cab de mise à jour est téléchargé
-        private Color _couleurSante = Theme.CouleurSanteInconnue;
-        private System.Windows.Forms.Timer minuterieSante;
+        private ApplicationApi _currentApp;
+        private ApplicationApi[] _lastApplications;
+        private string _availableUpdateVersion;
+        private string _downloadedUpdatePath; // non-null once the update .cab has been downloaded
+        private Color _healthColor = Theme.HealthColorUnknown;
+        private System.Windows.Forms.Timer healthTimer;
 
-        private delegate void ChargementTermineDelegate(string jsonResponse, string erreur);
-        private delegate void ProgressionTelechargementDelegate(int pourcentage);
-        private delegate void TelechargementTermineDelegate(string cheminFichier, string erreur);
-        private delegate void SanteVerifieeDelegate(bool enLigne);
-        private delegate void MiseAJourVerifieeDelegate(bool disponible, string version);
-        private delegate void ProgressionMiseAJourDelegate(int pourcentage);
-        private delegate void TelechargementMiseAJourTermineDelegate(string cheminFichier, string erreur);
-
-        protected Bitmap backBuffer;
-        protected Image constantAlphaImage;
+        private delegate void LoadCompletedDelegate(string jsonResponse, string error);
+        private delegate void DownloadProgressDelegate(int percentage);
+        private delegate void DownloadCompletedDelegate(string filePath, string error);
+        private delegate void HealthCheckedDelegate(bool online);
+        private delegate void UpdateCheckedDelegate(bool available, string version);
+        private delegate void UpdateProgressDelegate(int percentage);
+        private delegate void UpdateDownloadCompletedDelegate(string filePath, string error);
 
         public WinMoStore()
         {
-            CreerControles();
-            PositionnerControles();
+            CreateControls();
+            LayoutControls();
             this.Resize += new EventHandler(WinMoStore_Resize);
-            InitialiserSurveillanceSante();
-            VerifierMiseAJour();
+            InitializeHealthMonitoring();
+            CheckForUpdate();
         }
 
         private void WinMoStore_Resize(object sender, EventArgs e)
         {
-            PositionnerControles();
+            LayoutControls();
 
-            if (_dernieresApplications != null)
+            if (_lastApplications != null)
             {
-                AfficherApplications(_dernieresApplications);
+                DisplayApplications(_lastApplications);
             }
         }
 
-        private void CreerControles()
+        private void CreateControls()
         {
             this.Text = "WinMo Store";
-            this.BackColor = Theme.CouleurFond;
+            this.BackColor = Theme.BackgroundColor;
             this.WindowState = FormWindowState.Maximized;
 
-            menuItem1 = new MenuItem();
-            menuItem1.Text = "Actualiser";
-            menuItem1.Click += new EventHandler(menuItem1_Click);
+            menuItemRefresh = new MenuItem();
+            menuItemRefresh.Text = "Refresh";
+            menuItemRefresh.Click += new EventHandler(menuItemRefresh_Click);
 
-            menuItem2 = new MenuItem();
-            menuItem2.Text = "Quitter";
-            menuItem2.Click += new EventHandler(menuItem2_Click);
+            menuItemExit = new MenuItem();
+            menuItemExit.Text = "Exit";
+            menuItemExit.Click += new EventHandler(menuItemExit_Click);
 
-            mainMenu1 = new MainMenu();
-            mainMenu1.MenuItems.Add(menuItem1);
-            mainMenu1.MenuItems.Add(menuItem2);
-            this.Menu = mainMenu1;
+            mainMenu = new MainMenu();
+            mainMenu.MenuItems.Add(menuItemRefresh);
+            mainMenu.MenuItems.Add(menuItemExit);
+            this.Menu = mainMenu;
 
-            // ===================== PAGE LISTE =====================
+            // ===================== LIST PAGE =====================
 
-            panelHeaderListe = new Panel();
-            panelHeaderListe.BackColor = Theme.CouleurFond;
+            panelListHeader = new Panel();
+            panelListHeader.BackColor = Theme.BackgroundColor;
 
             logoMark = new Panel();
-            logoMark.BackColor = Theme.CouleurFond;
+            logoMark.BackColor = Theme.BackgroundColor;
             logoMark.Paint += new PaintEventHandler(LogoMark_Paint);
 
             labelLogo = new Label();
             labelLogo.Text = "W";
-            labelLogo.Font = Theme.PoliceLogo;
-            labelLogo.ForeColor = Theme.CouleurTexteClair;
-            labelLogo.BackColor = Theme.CouleurAccent;
+            labelLogo.Font = Theme.FontLogo;
+            labelLogo.ForeColor = Theme.TextColorLight;
+            labelLogo.BackColor = Theme.AccentColor;
             labelLogo.TextAlign = ContentAlignment.TopCenter;
             logoMark.Controls.Add(labelLogo);
 
-            labelHeaderListe = new Label();
-            labelHeaderListe.Text = "WinMo Store";
-            labelHeaderListe.ForeColor = Theme.CouleurTexte;
-            labelHeaderListe.Font = Theme.PoliceEntete;
+            labelListTitle = new Label();
+            labelListTitle.Text = "WinMo Store";
+            labelListTitle.ForeColor = Theme.TextColor;
+            labelListTitle.Font = Theme.FontHeader;
 
-            labelSousTitreListe = new Label();
-            labelSousTitreListe.Text = "v" + ObtenirVersionApplication();
-            labelSousTitreListe.ForeColor = Theme.CouleurTexteSecondaire;
-            labelSousTitreListe.Font = Theme.PoliceSousTitre;
+            labelListSubtitle = new Label();
+            labelListSubtitle.Text = "v" + GetApplicationVersion();
+            labelListSubtitle.ForeColor = Theme.TextColorSecondary;
+            labelListSubtitle.Font = Theme.FontSubtitle;
 
-            pastilleSante = new Panel();
-            pastilleSante.BackColor = Theme.CouleurFond;
-            pastilleSante.Paint += new PaintEventHandler(Pastille_Paint);
+            healthDot = new Panel();
+            healthDot.BackColor = Theme.BackgroundColor;
+            healthDot.Paint += new PaintEventHandler(HealthDot_Paint);
 
-            panelHeaderListe.Controls.Add(logoMark);
-            panelHeaderListe.Controls.Add(labelHeaderListe);
-            panelHeaderListe.Controls.Add(labelSousTitreListe);
-            panelHeaderListe.Controls.Add(pastilleSante);
+            panelListHeader.Controls.Add(logoMark);
+            panelListHeader.Controls.Add(labelListTitle);
+            panelListHeader.Controls.Add(labelListSubtitle);
+            panelListHeader.Controls.Add(healthDot);
 
-            // --- Barre de recherche en forme de pilule ---
-            panelRecherche = new Panel();
-            panelRecherche.BackColor = Theme.CouleurFond;
+            // --- Pill-shaped search bar ---
+            panelSearch = new Panel();
+            panelSearch.BackColor = Theme.BackgroundColor;
 
-            panelPilleRecherche = new Panel();
-            panelPilleRecherche.BackColor = Theme.CouleurFond;
-            panelPilleRecherche.Paint += new PaintEventHandler(PilleRecherche_Paint);
+            panelSearchPill = new Panel();
+            panelSearchPill.BackColor = Theme.BackgroundColor;
+            panelSearchPill.Paint += new PaintEventHandler(SearchPill_Paint);
 
-            textBoxRecherche = new TextBox();
-            textBoxRecherche.Font = Theme.PoliceNormale;
-            textBoxRecherche.ForeColor = Theme.CouleurTexte;
-            textBoxRecherche.BackColor = Theme.CouleurCarte;
-            try { textBoxRecherche.BorderStyle = BorderStyle.None; }
-            catch { /* ignoré si non supporté par la ROM */ }
-            textBoxRecherche.KeyDown += new KeyEventHandler(textBoxRecherche_KeyDown);
-            panelPilleRecherche.Controls.Add(textBoxRecherche);
+            textBoxSearch = new TextBox();
+            textBoxSearch.Font = Theme.FontNormal;
+            textBoxSearch.ForeColor = Theme.TextColor;
+            textBoxSearch.BackColor = Theme.CardColor;
+            try { textBoxSearch.BorderStyle = BorderStyle.None; }
+            catch { /* ignored if not supported by the ROM */ }
+            textBoxSearch.KeyDown += new KeyEventHandler(textBoxSearch_KeyDown);
+            panelSearchPill.Controls.Add(textBoxSearch);
 
-            buttonRechercher = new Button();
-            buttonRechercher.Text = "→";
-            buttonRechercher.Font = Theme.PoliceBouton;
-            buttonRechercher.ForeColor = Theme.CouleurTexteClair;
-            buttonRechercher.BackColor = Theme.CouleurAccent;
-            buttonRechercher.Click += new EventHandler(buttonRechercher_Click);
+            buttonSearch = new Button();
+            buttonSearch.Text = "→";
+            buttonSearch.Font = Theme.FontButton;
+            buttonSearch.ForeColor = Theme.TextColorLight;
+            buttonSearch.BackColor = Theme.AccentColor;
+            buttonSearch.Click += new EventHandler(buttonSearch_Click);
 
-            panelRecherche.Controls.Add(panelPilleRecherche);
-            panelRecherche.Controls.Add(buttonRechercher);
+            panelSearch.Controls.Add(panelSearchPill);
+            panelSearch.Controls.Add(buttonSearch);
 
-            // --- Bloc "Mise à jour disponible" : masqué tant qu'aucune MAJ n'est détectée ---
-            panelMiseAJour = new Panel();
-            panelMiseAJour.BackColor = Theme.CouleurFond;
-            panelMiseAJour.Visible = false;
+            // --- "Update available" block: hidden until an update is detected ---
+            panelUpdate = new Panel();
+            panelUpdate.BackColor = Theme.BackgroundColor;
+            panelUpdate.Visible = false;
 
-            buttonMiseAJour = new Button();
-            buttonMiseAJour.Text = "Mise à jour disponible";
-            buttonMiseAJour.Font = Theme.PoliceBouton;
-            buttonMiseAJour.ForeColor = Theme.CouleurTexteClair;
-            buttonMiseAJour.BackColor = Theme.CouleurAccent;
-            buttonMiseAJour.Click += new EventHandler(buttonMiseAJour_Click);
+            buttonUpdate = new Button();
+            buttonUpdate.Text = "Update available";
+            buttonUpdate.Font = Theme.FontButton;
+            buttonUpdate.ForeColor = Theme.TextColorLight;
+            buttonUpdate.BackColor = Theme.AccentColor;
+            buttonUpdate.Click += new EventHandler(buttonUpdate_Click);
 
-            progressMiseAJour = new ProgressBar();
-            progressMiseAJour.Minimum = 0;
-            progressMiseAJour.Maximum = 100;
-            progressMiseAJour.Visible = false;
+            progressUpdate = new ProgressBar();
+            progressUpdate.Minimum = 0;
+            progressUpdate.Maximum = 100;
+            progressUpdate.Visible = false;
 
-            labelStatutMiseAJour = new Label();
-            labelStatutMiseAJour.Font = Theme.PolicePetite;
-            labelStatutMiseAJour.ForeColor = Theme.CouleurTexteSecondaire;
-            labelStatutMiseAJour.Visible = false;
+            labelUpdateStatus = new Label();
+            labelUpdateStatus.Font = Theme.FontSmall;
+            labelUpdateStatus.ForeColor = Theme.TextColorSecondary;
+            labelUpdateStatus.Visible = false;
 
-            panelMiseAJour.Controls.Add(buttonMiseAJour);
-            panelMiseAJour.Controls.Add(progressMiseAJour);
-            panelMiseAJour.Controls.Add(labelStatutMiseAJour);
+            panelUpdate.Controls.Add(buttonUpdate);
+            panelUpdate.Controls.Add(progressUpdate);
+            panelUpdate.Controls.Add(labelUpdateStatus);
 
-            label1 = new Label();
-            label1.ForeColor = Theme.CouleurTexteSecondaire;
-            label1.Font = Theme.PolicePetite;
-            label1.Text = "Appuyez sur Actualiser pour charger la liste.";
+            labelStatus = new Label();
+            labelStatus.ForeColor = Theme.TextColorSecondary;
+            labelStatus.Font = Theme.FontSmall;
+            labelStatus.Text = "Press Refresh to load the list.";
 
-            panel1 = new Panel();
-            panel1.BackColor = Theme.CouleurFond;
-            panel1.AutoScroll = true;
+            panelList = new Panel();
+            panelList.BackColor = Theme.BackgroundColor;
+            panelList.AutoScroll = true;
 
-            // ===================== PAGE DÉTAILS =====================
+            // ===================== DETAILS PAGE =====================
 
             panelDetails = new Panel();
-            panelDetails.BackColor = Theme.CouleurFond;
+            panelDetails.BackColor = Theme.BackgroundColor;
             panelDetails.Visible = false;
             panelDetails.AutoScroll = true;
 
-            panelHeaderDetails = new Panel();
-            panelHeaderDetails.BackColor = Theme.CouleurFond;
+            panelDetailsHeader = new Panel();
+            panelDetailsHeader.BackColor = Theme.BackgroundColor;
 
-            labelHeaderDetails = new Label();
-            labelHeaderDetails.Text = "Détails de l'application";
-            labelHeaderDetails.ForeColor = Theme.CouleurTexte;
-            labelHeaderDetails.Font = Theme.PoliceEntete;
-            panelHeaderDetails.Controls.Add(labelHeaderDetails);
+            labelDetailsTitle = new Label();
+            labelDetailsTitle.Text = "Application details";
+            labelDetailsTitle.ForeColor = Theme.TextColor;
+            labelDetailsTitle.Font = Theme.FontHeader;
+            panelDetailsHeader.Controls.Add(labelDetailsTitle);
 
-            carteInfo = new Panel();
-            carteInfo.BackColor = Theme.CouleurFond;
-            carteInfo.Paint += new PaintEventHandler(CarteInfo_Paint);
+            infoCard = new Panel();
+            infoCard.BackColor = Theme.BackgroundColor;
+            infoCard.Paint += new PaintEventHandler(InfoCard_Paint);
 
-            labelNomDetails = new Label();
-            labelNomDetails.Font = Theme.PoliceTitreDetail;
-            labelNomDetails.ForeColor = Theme.CouleurTexte;
+            labelDetailsName = new Label();
+            labelDetailsName.Font = Theme.FontDetailsTitle;
+            labelDetailsName.ForeColor = Theme.TextColor;
 
-            labelIdDetails = new Label();
-            labelIdDetails.Font = Theme.PolicePetite;
-            labelIdDetails.ForeColor = Theme.CouleurTexteSecondaire;
+            labelDetailsId = new Label();
+            labelDetailsId.Font = Theme.FontSmall;
+            labelDetailsId.ForeColor = Theme.TextColorSecondary;
 
-            carteInfo.Controls.Add(labelNomDetails);
-            carteInfo.Controls.Add(labelIdDetails);
+            infoCard.Controls.Add(labelDetailsName);
+            infoCard.Controls.Add(labelDetailsId);
 
-            buttonTelecharger = new Button();
-            buttonTelecharger.Text = "Télécharger";
-            buttonTelecharger.Font = Theme.PoliceBouton;
-            buttonTelecharger.ForeColor = Theme.CouleurTexteClair;
-            buttonTelecharger.BackColor = Theme.CouleurAccent;
-            buttonTelecharger.Click += new EventHandler(buttonTelecharger_Click);
+            buttonDownload = new Button();
+            buttonDownload.Text = "Download";
+            buttonDownload.Font = Theme.FontButton;
+            buttonDownload.ForeColor = Theme.TextColorLight;
+            buttonDownload.BackColor = Theme.AccentColor;
+            buttonDownload.Click += new EventHandler(buttonDownload_Click);
 
-            progressTelechargement = new ProgressBar();
-            progressTelechargement.Minimum = 0;
-            progressTelechargement.Maximum = 100;
-            progressTelechargement.Visible = false;
+            progressDownload = new ProgressBar();
+            progressDownload.Minimum = 0;
+            progressDownload.Maximum = 100;
+            progressDownload.Visible = false;
 
-            labelStatutTelechargement = new Label();
-            labelStatutTelechargement.Font = Theme.PolicePetite;
-            labelStatutTelechargement.ForeColor = Theme.CouleurTexteSecondaire;
-            labelStatutTelechargement.Visible = false;
+            labelDownloadStatus = new Label();
+            labelDownloadStatus.Font = Theme.FontSmall;
+            labelDownloadStatus.ForeColor = Theme.TextColorSecondary;
+            labelDownloadStatus.Visible = false;
 
-            buttonRetour = new Button();
-            buttonRetour.Text = "‹ Retour";
-            buttonRetour.Font = Theme.PoliceNormale;
-            buttonRetour.ForeColor = Theme.CouleurTexte;
-            buttonRetour.BackColor = Theme.CouleurCarte;
-            buttonRetour.Click += new EventHandler(buttonRetour_Click);
+            buttonBack = new Button();
+            buttonBack.Text = "‹ Back";
+            buttonBack.Font = Theme.FontNormal;
+            buttonBack.ForeColor = Theme.TextColor;
+            buttonBack.BackColor = Theme.CardColor;
+            buttonBack.Click += new EventHandler(buttonBack_Click);
 
-            panelDetails.Controls.Add(buttonRetour);
-            panelDetails.Controls.Add(labelStatutTelechargement);
-            panelDetails.Controls.Add(progressTelechargement);
-            panelDetails.Controls.Add(buttonTelecharger);
-            panelDetails.Controls.Add(carteInfo);
-            panelDetails.Controls.Add(panelHeaderDetails);
+            panelDetails.Controls.Add(buttonBack);
+            panelDetails.Controls.Add(labelDownloadStatus);
+            panelDetails.Controls.Add(progressDownload);
+            panelDetails.Controls.Add(buttonDownload);
+            panelDetails.Controls.Add(infoCard);
+            panelDetails.Controls.Add(panelDetailsHeader);
 
             this.Controls.Add(panelDetails);
-            this.Controls.Add(panel1);
-            this.Controls.Add(label1);
-            this.Controls.Add(panelMiseAJour);
-            this.Controls.Add(panelRecherche);
-            this.Controls.Add(panelHeaderListe);
+            this.Controls.Add(panelList);
+            this.Controls.Add(labelStatus);
+            this.Controls.Add(panelUpdate);
+            this.Controls.Add(panelSearch);
+            this.Controls.Add(panelListHeader);
         }
 
-        private void PositionnerControles()
+        private void LayoutControls()
         {
-            int largeur = this.ClientSize.Width;
-            int hauteur = this.ClientSize.Height;
+            int width = this.ClientSize.Width;
+            int height = this.ClientSize.Height;
 
-            // ===== PAGE LISTE =====
-            panelHeaderListe.Left = 0;
-            panelHeaderListe.Top = 0;
-            panelHeaderListe.Width = largeur;
-            panelHeaderListe.Height = hauteurEntete;
+            // ===== LIST PAGE =====
+            panelListHeader.Left = 0;
+            panelListHeader.Top = 0;
+            panelListHeader.Width = width;
+            panelListHeader.Height = headerHeight;
 
             logoMark.Left = 10;
-            logoMark.Top = (hauteurEntete - 32) / 2;
+            logoMark.Top = (headerHeight - 32) / 2;
             logoMark.Width = 32;
             logoMark.Height = 32;
 
@@ -302,188 +299,188 @@ namespace API_diag
             labelLogo.Width = 20;
             labelLogo.Height = 20;
 
-            pastilleSante.Width = 12;
-            pastilleSante.Height = 12;
-            pastilleSante.Left = largeur - 22;
-            pastilleSante.Top = (hauteurEntete - 12) / 2;
+            healthDot.Width = 12;
+            healthDot.Height = 12;
+            healthDot.Left = width - 22;
+            healthDot.Top = (headerHeight - 12) / 2;
 
-            labelHeaderListe.Left = logoMark.Left + logoMark.Width + 10;
-            labelHeaderListe.Top = 6;
-            labelHeaderListe.Width = pastilleSante.Left - labelHeaderListe.Left - 6;
-            labelHeaderListe.Height = 20;
+            labelListTitle.Left = logoMark.Left + logoMark.Width + 10;
+            labelListTitle.Top = 6;
+            labelListTitle.Width = healthDot.Left - labelListTitle.Left - 6;
+            labelListTitle.Height = 20;
 
-            labelSousTitreListe.Left = labelHeaderListe.Left;
-            labelSousTitreListe.Top = labelHeaderListe.Top + labelHeaderListe.Height;
-            labelSousTitreListe.Width = labelHeaderListe.Width;
-            labelSousTitreListe.Height = 16;
+            labelListSubtitle.Left = labelListTitle.Left;
+            labelListSubtitle.Top = labelListTitle.Top + labelListTitle.Height;
+            labelListSubtitle.Width = labelListTitle.Width;
+            labelListSubtitle.Height = 16;
 
-            panelRecherche.Left = 0;
-            panelRecherche.Top = panelHeaderListe.Top + panelHeaderListe.Height;
-            panelRecherche.Width = largeur;
-            panelRecherche.Height = 44;
+            panelSearch.Left = 0;
+            panelSearch.Top = panelListHeader.Top + panelListHeader.Height;
+            panelSearch.Width = width;
+            panelSearch.Height = 44;
 
-            buttonRechercher.Width = 44;
-            buttonRechercher.Height = 32;
-            buttonRechercher.Left = panelRecherche.Width - buttonRechercher.Width - 8;
-            buttonRechercher.Top = (panelRecherche.Height - buttonRechercher.Height) / 2;
+            buttonSearch.Width = 44;
+            buttonSearch.Height = 32;
+            buttonSearch.Left = panelSearch.Width - buttonSearch.Width - 8;
+            buttonSearch.Top = (panelSearch.Height - buttonSearch.Height) / 2;
 
-            panelPilleRecherche.Left = 8;
-            panelPilleRecherche.Top = (panelRecherche.Height - 32) / 2;
-            panelPilleRecherche.Width = buttonRechercher.Left - 8 - 8;
-            panelPilleRecherche.Height = 32;
+            panelSearchPill.Left = 8;
+            panelSearchPill.Top = (panelSearch.Height - 32) / 2;
+            panelSearchPill.Width = buttonSearch.Left - 8 - 8;
+            panelSearchPill.Height = 32;
 
-            textBoxRecherche.Left = 14;
-            textBoxRecherche.Top = (panelPilleRecherche.Height - 20) / 2;
-            textBoxRecherche.Width = panelPilleRecherche.Width - 24;
-            textBoxRecherche.Height = 20;
+            textBoxSearch.Left = 14;
+            textBoxSearch.Top = (panelSearchPill.Height - 20) / 2;
+            textBoxSearch.Width = panelSearchPill.Width - 24;
+            textBoxSearch.Height = 20;
 
-            panelMiseAJour.Left = 0;
-            panelMiseAJour.Top = panelRecherche.Top + panelRecherche.Height;
-            panelMiseAJour.Width = largeur;
-            panelMiseAJour.Height = 78;
+            panelUpdate.Left = 0;
+            panelUpdate.Top = panelSearch.Top + panelSearch.Height;
+            panelUpdate.Width = width;
+            panelUpdate.Height = 78;
 
-            buttonMiseAJour.Left = 8;
-            buttonMiseAJour.Top = 6;
-            buttonMiseAJour.Width = largeur - 16;
-            buttonMiseAJour.Height = 34;
+            buttonUpdate.Left = 8;
+            buttonUpdate.Top = 6;
+            buttonUpdate.Width = width - 16;
+            buttonUpdate.Height = 34;
 
-            progressMiseAJour.Left = 8;
-            progressMiseAJour.Top = buttonMiseAJour.Top + buttonMiseAJour.Height + 6;
-            progressMiseAJour.Width = largeur - 16;
-            progressMiseAJour.Height = 16;
+            progressUpdate.Left = 8;
+            progressUpdate.Top = buttonUpdate.Top + buttonUpdate.Height + 6;
+            progressUpdate.Width = width - 16;
+            progressUpdate.Height = 16;
 
-            labelStatutMiseAJour.Left = 8;
-            labelStatutMiseAJour.Top = progressMiseAJour.Top + progressMiseAJour.Height + 4;
-            labelStatutMiseAJour.Width = largeur - 16;
-            labelStatutMiseAJour.Height = 16;
+            labelUpdateStatus.Left = 8;
+            labelUpdateStatus.Top = progressUpdate.Top + progressUpdate.Height + 4;
+            labelUpdateStatus.Width = width - 16;
+            labelUpdateStatus.Height = 16;
 
-            int topApresRecherche = panelMiseAJour.Visible
-                ? panelMiseAJour.Top + panelMiseAJour.Height
-                : panelRecherche.Top + panelRecherche.Height;
+            int topAfterSearch = panelUpdate.Visible
+                ? panelUpdate.Top + panelUpdate.Height
+                : panelSearch.Top + panelSearch.Height;
 
-            label1.Left = 8;
-            label1.Top = topApresRecherche + 4;
-            label1.Width = largeur - 16;
-            label1.Height = 18;
+            labelStatus.Left = 8;
+            labelStatus.Top = topAfterSearch + 4;
+            labelStatus.Width = width - 16;
+            labelStatus.Height = 18;
 
-            panel1.Left = 0;
-            panel1.Top = label1.Top + label1.Height + 2;
-            panel1.Width = largeur;
-            panel1.Height = hauteur - panel1.Top;
+            panelList.Left = 0;
+            panelList.Top = labelStatus.Top + labelStatus.Height + 2;
+            panelList.Width = width;
+            panelList.Height = height - panelList.Top;
 
-            // ===== PAGE DÉTAILS =====
+            // ===== DETAILS PAGE =====
             panelDetails.Left = 0;
             panelDetails.Top = 0;
-            panelDetails.Width = largeur;
-            panelDetails.Height = hauteur;
+            panelDetails.Width = width;
+            panelDetails.Height = height;
 
-            panelHeaderDetails.Left = 0;
-            panelHeaderDetails.Top = 0;
-            panelHeaderDetails.Width = panelDetails.Width;
-            panelHeaderDetails.Height = hauteurEntete - 20;
+            panelDetailsHeader.Left = 0;
+            panelDetailsHeader.Top = 0;
+            panelDetailsHeader.Width = panelDetails.Width;
+            panelDetailsHeader.Height = headerHeight - 20;
 
-            labelHeaderDetails.Left = 8;
-            labelHeaderDetails.Top = 10;
-            labelHeaderDetails.Width = panelHeaderDetails.Width - 16;
-            labelHeaderDetails.Height = 22;
+            labelDetailsTitle.Left = 8;
+            labelDetailsTitle.Top = 10;
+            labelDetailsTitle.Width = panelDetailsHeader.Width - 16;
+            labelDetailsTitle.Height = 22;
 
-            carteInfo.Left = 10;
-            carteInfo.Top = panelHeaderDetails.Height + 12;
-            carteInfo.Width = panelDetails.Width - 20;
-            carteInfo.Height = 90;
+            infoCard.Left = 10;
+            infoCard.Top = panelDetailsHeader.Height + 12;
+            infoCard.Width = panelDetails.Width - 20;
+            infoCard.Height = 90;
 
-            labelNomDetails.Left = 14;
-            labelNomDetails.Top = 12;
-            labelNomDetails.Width = carteInfo.Width - 28;
-            labelNomDetails.Height = 40;
+            labelDetailsName.Left = 14;
+            labelDetailsName.Top = 12;
+            labelDetailsName.Width = infoCard.Width - 28;
+            labelDetailsName.Height = 40;
 
-            labelIdDetails.Left = 14;
-            labelIdDetails.Top = labelNomDetails.Top + labelNomDetails.Height;
-            labelIdDetails.Width = carteInfo.Width - 28;
-            labelIdDetails.Height = 30;
+            labelDetailsId.Left = 14;
+            labelDetailsId.Top = labelDetailsName.Top + labelDetailsName.Height;
+            labelDetailsId.Width = infoCard.Width - 28;
+            labelDetailsId.Height = 30;
 
-            buttonTelecharger.Left = 10;
-            buttonTelecharger.Top = carteInfo.Top + carteInfo.Height + 16;
-            buttonTelecharger.Width = panelDetails.Width - 20;
-            buttonTelecharger.Height = 42;
+            buttonDownload.Left = 10;
+            buttonDownload.Top = infoCard.Top + infoCard.Height + 16;
+            buttonDownload.Width = panelDetails.Width - 20;
+            buttonDownload.Height = 42;
 
-            progressTelechargement.Left = 10;
-            progressTelechargement.Top = buttonTelecharger.Top + buttonTelecharger.Height + 8;
-            progressTelechargement.Width = panelDetails.Width - 20;
-            progressTelechargement.Height = 18;
+            progressDownload.Left = 10;
+            progressDownload.Top = buttonDownload.Top + buttonDownload.Height + 8;
+            progressDownload.Width = panelDetails.Width - 20;
+            progressDownload.Height = 18;
 
-            labelStatutTelechargement.Left = 10;
-            labelStatutTelechargement.Top = progressTelechargement.Top + progressTelechargement.Height + 4;
-            labelStatutTelechargement.Width = panelDetails.Width - 20;
-            labelStatutTelechargement.Height = 16;
+            labelDownloadStatus.Left = 10;
+            labelDownloadStatus.Top = progressDownload.Top + progressDownload.Height + 4;
+            labelDownloadStatus.Width = panelDetails.Width - 20;
+            labelDownloadStatus.Height = 16;
 
-            buttonRetour.Left = 10;
-            buttonRetour.Top = labelStatutTelechargement.Top + labelStatutTelechargement.Height + 8;
-            buttonRetour.Width = panelDetails.Width - 20;
-            buttonRetour.Height = 36;
+            buttonBack.Left = 10;
+            buttonBack.Top = labelDownloadStatus.Top + labelDownloadStatus.Height + 8;
+            buttonBack.Width = panelDetails.Width - 20;
+            buttonBack.Height = 36;
         }
 
         private void LogoMark_Paint(object sender, PaintEventArgs pe)
         {
             Panel p = (Panel)sender;
-            using (SolidBrush brush = new SolidBrush(Theme.CouleurAccent))
+            using (SolidBrush brush = new SolidBrush(Theme.AccentColor))
             {
-                RenduArrondi.RemplirRectangleArrondi(pe.Graphics, brush, 0, 0, p.Width, p.Height, 10);
+                RoundedRendering.FillRoundedRectangle(pe.Graphics, brush, 0, 0, p.Width, p.Height, 10);
             }
         }
 
-        private void PilleRecherche_Paint(object sender, PaintEventArgs pe)
+        private void SearchPill_Paint(object sender, PaintEventArgs pe)
         {
             Panel p = (Panel)sender;
-            using (SolidBrush brush = new SolidBrush(Theme.CouleurCarte))
+            using (SolidBrush brush = new SolidBrush(Theme.CardColor))
             {
-                RenduArrondi.RemplirRectangleArrondi(pe.Graphics, brush, 0, 0, p.Width, p.Height, p.Height / 2);
+                RoundedRendering.FillRoundedRectangle(pe.Graphics, brush, 0, 0, p.Width, p.Height, p.Height / 2);
             }
         }
 
-        private void CarteInfo_Paint(object sender, PaintEventArgs pe)
+        private void InfoCard_Paint(object sender, PaintEventArgs pe)
         {
             Panel p = (Panel)sender;
-            using (SolidBrush brush = new SolidBrush(Theme.CouleurCarte))
+            using (SolidBrush brush = new SolidBrush(Theme.CardColor))
             {
-                RenduArrondi.RemplirRectangleArrondi(pe.Graphics, brush, 0, 0, p.Width, p.Height, 14);
+                RoundedRendering.FillRoundedRectangle(pe.Graphics, brush, 0, 0, p.Width, p.Height, 14);
             }
         }
 
-        private void Pastille_Paint(object sender, PaintEventArgs pe)
+        private void HealthDot_Paint(object sender, PaintEventArgs pe)
         {
             Panel p = (Panel)sender;
-            using (SolidBrush brush = new SolidBrush(_couleurSante))
+            using (SolidBrush brush = new SolidBrush(_healthColor))
             {
                 pe.Graphics.FillEllipse(brush, 0, 0, p.Width - 1, p.Height - 1);
             }
         }
 
-        #region Surveillance de /api/health
+        #region /api/health monitoring
 
-        private void InitialiserSurveillanceSante()
+        private void InitializeHealthMonitoring()
         {
-            minuterieSante = new System.Windows.Forms.Timer();
-            minuterieSante.Interval = 15000;
-            minuterieSante.Tick += new EventHandler(minuterieSante_Tick);
-            minuterieSante.Enabled = true;
+            healthTimer = new System.Windows.Forms.Timer();
+            healthTimer.Interval = 15000;
+            healthTimer.Tick += new EventHandler(healthTimer_Tick);
+            healthTimer.Enabled = true;
 
-            VerifierSante();
+            CheckHealth();
         }
 
-        private void minuterieSante_Tick(object sender, EventArgs e)
+        private void healthTimer_Tick(object sender, EventArgs e)
         {
-            VerifierSante();
+            CheckHealth();
         }
 
-        private void VerifierSante()
+        private void CheckHealth()
         {
-            if (verificationSanteEnCours) return;
-            verificationSanteEnCours = true;
+            if (isCheckingHealth) return;
+            isCheckingHealth = true;
 
-            Thread threadSante = new Thread(new ThreadStart(delegate
+            Thread healthThread = new Thread(new ThreadStart(delegate
             {
-                bool enLigne = false;
+                bool online = false;
                 try
                 {
                     HttpWebRequest request = (HttpWebRequest)WebRequest.Create(ApiBaseUrl + "/api/health");
@@ -492,84 +489,84 @@ namespace API_diag
 
                     using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
                     {
-                        enLigne = (response.StatusCode == HttpStatusCode.OK);
+                        online = (response.StatusCode == HttpStatusCode.OK);
                     }
                 }
                 catch
                 {
-                    enLigne = false;
+                    online = false;
                 }
 
-                this.Invoke(new SanteVerifieeDelegate(SanteVerifiee), new object[] { enLigne });
+                this.Invoke(new HealthCheckedDelegate(HealthChecked), new object[] { online });
             }));
 
-            threadSante.IsBackground = true;
-            threadSante.Start();
+            healthThread.IsBackground = true;
+            healthThread.Start();
         }
 
-        private void SanteVerifiee(bool enLigne)
+        private void HealthChecked(bool online)
         {
-            verificationSanteEnCours = false;
-            _couleurSante = enLigne ? Theme.CouleurSanteOk : Theme.CouleurSanteKo;
-            pastilleSante.Invalidate();
+            isCheckingHealth = false;
+            _healthColor = online ? Theme.HealthColorOk : Theme.HealthColorKo;
+            healthDot.Invalidate();
         }
 
         #endregion
 
-        #region Vérification de mise à jour de l'application
+        #region Application update check
 
-        private void VerifierMiseAJour()
+        private void CheckForUpdate()
         {
-            if (verificationMiseAJourEnCours) return;
-            verificationMiseAJourEnCours = true;
+            if (isCheckingUpdate) return;
+            isCheckingUpdate = true;
 
-            Thread threadMaj = new Thread(new ThreadStart(delegate
+            Thread updateThread = new Thread(new ThreadStart(delegate
             {
-                bool disponible = false;
-                string versionDistante = null;
+                bool available = false;
+                string remoteVersion = null;
 
                 try
                 {
                     string json = GetApiData(ApiBaseUrl + "/api/getAppVersion");
-                    AppVersionResponse reponse = Converter.Deserialize<AppVersionResponse>(json);
+                    AppVersionResponse response = Converter.Deserialize<AppVersionResponse>(json);
 
-                    if (reponse != null && reponse.success && !string.IsNullOrEmpty(reponse.version))
+                    if (response != null && response.success && !string.IsNullOrEmpty(response.version))
                     {
-                        versionDistante = reponse.version;
-                        string versionLocale = ObtenirVersionApplication();
-                        disponible = CompareVersions(versionDistante, versionLocale) > 0;
+                        remoteVersion = response.version;
+                        string localVersion = GetApplicationVersion();
+                        available = CompareVersions(remoteVersion, localVersion) > 0;
                     }
                 }
                 catch
                 {
-                    disponible = false;
+                    available = false;
                 }
 
-                this.Invoke(new MiseAJourVerifieeDelegate(MiseAJourVerifiee), new object[] { disponible, versionDistante });
+                this.Invoke(new UpdateCheckedDelegate(UpdateChecked), new object[] { available, remoteVersion });
             }));
 
-            threadMaj.IsBackground = true;
-            threadMaj.Start();
+            updateThread.IsBackground = true;
+            updateThread.Start();
         }
 
-        private void MiseAJourVerifiee(bool disponible, string version)
+        private void UpdateChecked(bool available, string version)
         {
-            verificationMiseAJourEnCours = false;
-            _versionDisponibleMiseAJour = version;
+            isCheckingUpdate = false;
+            _availableUpdateVersion = version;
 
-            if (disponible)
+            if (available)
             {
-                buttonMiseAJour.Text = "Mise à jour disponible (v" + version + ")";
-                buttonMiseAJour.Enabled = true;
-                progressMiseAJour.Visible = false;
-                progressMiseAJour.Value = 0;
-                labelStatutMiseAJour.Visible = false;
-                _cheminMiseAJourTelechargee = null; // nouvelle version détectée : on repart d'un état "à télécharger"
+                buttonUpdate.Text = "Update available (v" + version + ")";
+                buttonUpdate.Enabled = true;
+                progressUpdate.Visible = false;
+                progressUpdate.Value = 0;
+                labelUpdateStatus.Visible = false;
+                _downloadedUpdatePath = null; // new version detected: back to "needs download" state
             }
 
-            panelMiseAJour.Visible = disponible;
+            panelUpdate.Visible = available;
 
-            PositionnerControles();
+            LayoutControls();
         }
 
         private static int CompareVersions(string a, string b)
@@ -604,180 +601,175 @@ namespace API_diag
             return parts;
         }
 
-        // Bascule entre "télécharger" et "installer" selon qu'un .cab a déjà été téléchargé ou non.
-        private void buttonMiseAJour_Click(object sender, EventArgs e)
+        // Toggles between "download" and "install" depending on whether a .cab has already been downloaded.
+        private void buttonUpdate_Click(object sender, EventArgs e)
         {
-            if (_cheminMiseAJourTelechargee != null)
+            if (_downloadedUpdatePath != null)
             {
-                InstallerMiseAJour();
+                InstallUpdate();
                 return;
             }
 
-            if (telechargementMiseAJourEnCours) return;
+            if (isDownloadingUpdate) return;
 
-            telechargementMiseAJourEnCours = true;
-            buttonMiseAJour.Enabled = false;
-            buttonMiseAJour.Text = "Téléchargement...";
-            progressMiseAJour.Visible = true;
-            progressMiseAJour.Value = 0;
-            labelStatutMiseAJour.Visible = true;
-            labelStatutMiseAJour.Text = "Démarrage...";
+            isDownloadingUpdate = true;
+            buttonUpdate.Enabled = false;
+            buttonUpdate.Text = "Downloading...";
+            progressUpdate.Visible = true;
+            progressUpdate.Value = 0;
+            labelUpdateStatus.Visible = true;
+            labelUpdateStatus.Text = "Starting...";
 
-            string urlCab = ApiBaseUrl + "/api/updateAppCab";
-            const string nomFichier = "WinMoStore.cab";
+            string cabUrl = ApiBaseUrl + "/api/updateAppCab";
+            const string fileName = "WinMoStore.cab";
 
-            Thread threadTelechargementMaj = new Thread(new ThreadStart(delegate
+            Thread updateDownloadThread = new Thread(new ThreadStart(delegate
             {
-                string cheminFichier = null;
-                string erreur = null;
+                string filePath = null;
+                string error = null;
 
                 try
                 {
-                    cheminFichier = TelechargerFichierMiseAJour(urlCab, nomFichier);
+                    filePath = DownloadUpdateFile(cabUrl, fileName);
                 }
                 catch (Exception ex)
                 {
-                    erreur = ex.Message;
+                    error = ex.Message;
                 }
 
-                this.Invoke(new TelechargementMiseAJourTermineDelegate(TelechargementMiseAJourTermine), new object[] { cheminFichier, erreur });
+                this.Invoke(new UpdateDownloadCompletedDelegate(UpdateDownloadCompleted), new object[] { filePath, error });
             }));
 
-            threadTelechargementMaj.Start();
+            updateDownloadThread.Start();
         }
 
-        private string TelechargerFichierMiseAJour(string url, string nomFichier)
+        private string DownloadUpdateFile(string url, string fileName)
         {
             HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
             request.Method = "GET";
 
             using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
             {
-                long tailleTotale = response.ContentLength;
+                long totalSize = response.ContentLength;
 
-                string dossierDestination = "\\My Documents";
-                if (!Directory.Exists(dossierDestination))
-                {
-                    dossierDestination = "\\";
-                }
-                string cheminComplet = Path.Combine(dossierDestination, nomFichier);
+                string fullPath = Path.Combine(GetApplicationFolder(), fileName);
 
-                using (Stream fluxReseau = response.GetResponseStream())
-                using (FileStream fluxFichier = new FileStream(cheminComplet, FileMode.Create, FileAccess.Write))
+                using (Stream networkStream = response.GetResponseStream())
+                using (FileStream fileStream = new FileStream(fullPath, FileMode.Create, FileAccess.Write))
                 {
                     byte[] buffer = new byte[4096];
-                    long totalLu = 0;
-                    int lu;
+                    long totalRead = 0;
+                    int read;
 
-                    while ((lu = fluxReseau.Read(buffer, 0, buffer.Length)) > 0)
+                    while ((read = networkStream.Read(buffer, 0, buffer.Length)) > 0)
                     {
-                        fluxFichier.Write(buffer, 0, lu);
-                        totalLu += lu;
+                        fileStream.Write(buffer, 0, read);
+                        totalRead += read;
 
-                        if (tailleTotale > 0)
+                        if (totalSize > 0)
                         {
-                            int pourcentage = (int)((totalLu * 100L) / tailleTotale);
-                            this.Invoke(new ProgressionMiseAJourDelegate(MettreAJourProgressionMiseAJour), new object[] { pourcentage });
+                            int percentage = (int)((totalRead * 100L) / totalSize);
+                            this.Invoke(new UpdateProgressDelegate(UpdateDownloadProgressChanged), new object[] { percentage });
                         }
                     }
                 }
 
-                return cheminComplet;
+                return fullPath;
             }
         }
 
-        private void MettreAJourProgressionMiseAJour(int pourcentage)
+        private void UpdateDownloadProgressChanged(int percentage)
         {
-            if (pourcentage < 0) pourcentage = 0;
-            if (pourcentage > 100) pourcentage = 100;
-            progressMiseAJour.Value = pourcentage;
-            labelStatutMiseAJour.Text = pourcentage + " %";
+            if (percentage < 0) percentage = 0;
+            if (percentage > 100) percentage = 100;
+            progressUpdate.Value = percentage;
+            labelUpdateStatus.Text = percentage + " %";
         }
 
-        private void TelechargementMiseAJourTermine(string cheminFichier, string erreur)
+        private void UpdateDownloadCompleted(string filePath, string error)
         {
-            telechargementMiseAJourEnCours = false;
+            isDownloadingUpdate = false;
 
-            if (erreur != null)
+            if (error != null)
             {
-                buttonMiseAJour.Enabled = true;
-                buttonMiseAJour.Text = "Mise à jour disponible (v" + _versionDisponibleMiseAJour + ")";
-                labelStatutMiseAJour.Text = "Échec du téléchargement.";
-                AfficherAvertissement("Le téléchargement de la mise à jour a échoué.\n\n" + erreur);
+                buttonUpdate.Enabled = true;
+                buttonUpdate.Text = "Update available (v" + _availableUpdateVersion + ")";
+                labelUpdateStatus.Text = "Download failed.";
+                ShowWarning("The update download failed.\n\n" + error);
                 return;
             }
 
-            _cheminMiseAJourTelechargee = cheminFichier;
+            _downloadedUpdatePath = filePath;
 
-            progressMiseAJour.Value = 100;
-            labelStatutMiseAJour.Text = "Téléchargé : " + cheminFichier;
+            progressUpdate.Value = 100;
+            labelUpdateStatus.Text = "Downloaded: " + filePath;
 
-            buttonMiseAJour.Enabled = true;
-            buttonMiseAJour.Text = "Installer";
+            buttonUpdate.Enabled = true;
+            buttonUpdate.Text = "Install";
         }
 
-        // Lance l'installeur natif sur le .cab téléchargé, puis ferme l'application
-        // pour laisser la main à wceload.exe sans conflit avec le processus courant.
-        private void InstallerMiseAJour()
+        // Launches the native installer on the downloaded .cab, then closes the app
+        // to hand off cleanly to wceload.exe without conflicting with the current process.
+        private void InstallUpdate()
         {
             try
             {
-                Process.Start(new ProcessStartInfo(_cheminMiseAJourTelechargee, ""));
+                Process.Start(new ProcessStartInfo(_downloadedUpdatePath, ""));
                 Application.Exit();
             }
             catch (Exception ex)
             {
-                AfficherAvertissement("Le fichier a été téléchargé (" + _cheminMiseAJourTelechargee + "), mais son installation automatique a échoué.\n\n" + ex.Message + "\n\nVous pouvez l'installer manuellement depuis l'explorateur de fichiers.");
+                ShowWarning("The file was downloaded (" + _downloadedUpdatePath + "), but automatic installation failed.\n\n" + ex.Message + "\n\nYou can install it manually from the file explorer.");
             }
         }
 
         #endregion
 
-        #region Barre de recherche
+        #region Search bar
 
-        private void textBoxRecherche_KeyDown(object sender, KeyEventArgs e)
+        private void textBoxSearch_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.KeyCode == Keys.Enter)
             {
-                LancerRecherche();
+                RunSearch();
             }
         }
 
-        private void buttonRechercher_Click(object sender, EventArgs e)
+        private void buttonSearch_Click(object sender, EventArgs e)
         {
-            LancerRecherche();
+            RunSearch();
         }
 
-        private void LancerRecherche()
+        private void RunSearch()
         {
-            string motCle = textBoxRecherche.Text.Trim();
+            string keyword = textBoxSearch.Text.Trim();
             string url;
 
-            if (motCle.Length == 0)
+            if (keyword.Length == 0)
             {
                 url = ApiBaseUrl + "/api/applications/todaylist";
             }
             else
             {
-                url = ApiBaseUrl + "/api/applications/search?q=" + EncoderComposantUrl(motCle);
+                url = ApiBaseUrl + "/api/applications/search?q=" + EncodeUrlComponent(keyword);
             }
 
-            ChargerApplications(url);
+            LoadApplications(url);
         }
 
-        private static string EncoderComposantUrl(string valeur)
+        private static string EncodeUrlComponent(string value)
         {
-            if (string.IsNullOrEmpty(valeur)) return string.Empty;
+            if (string.IsNullOrEmpty(value)) return string.Empty;
 
-            byte[] octets = Encoding.UTF8.GetBytes(valeur);
+            byte[] bytes = Encoding.UTF8.GetBytes(value);
             StringBuilder sb = new StringBuilder();
 
-            foreach (byte b in octets)
+            foreach (byte b in bytes)
             {
                 char c = (char)b;
-                bool sur = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
-                           c == '-' || c == '_' || c == '.' || c == '~';
-                if (sur)
+                bool safe = (c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
+                            c == '-' || c == '_' || c == '.' || c == '~';
+                if (safe)
                 {
                     sb.Append(c);
                 }
@@ -792,28 +784,28 @@ namespace API_diag
 
         #endregion
 
-        private void menuItem1_Click(object sender, EventArgs e)
+        private void menuItemRefresh_Click(object sender, EventArgs e)
         {
-            textBoxRecherche.Text = "";
-            ChargerApplications(ApiBaseUrl + "/api/applications/todaylist");
+            textBoxSearch.Text = "";
+            LoadApplications(ApiBaseUrl + "/api/applications/todaylist");
         }
 
-        private void ChargerApplications(string url)
+        private void LoadApplications(string url)
         {
-            if (chargementEnCours) return;
+            if (isLoading) return;
 
-            chargementEnCours = true;
-            label1.Text = "Chargement...";
-            label1.ForeColor = Theme.CouleurTexteSecondaire;
-            panel1.Controls.Clear();
+            isLoading = true;
+            labelStatus.Text = "Loading...";
+            labelStatus.ForeColor = Theme.TextColorSecondary;
+            panelList.Controls.Clear();
 
             Cursor.Current = Cursors.WaitCursor;
             Cursor.Show();
 
-            Thread threadChargement = new Thread(new ThreadStart(delegate
+            Thread loadThread = new Thread(new ThreadStart(delegate
             {
                 string jsonResponse = null;
-                string erreur = null;
+                string error = null;
 
                 try
                 {
@@ -821,26 +813,26 @@ namespace API_diag
                 }
                 catch (Exception ex)
                 {
-                    erreur = ex.Message;
+                    error = ex.Message;
                 }
 
-                this.Invoke(new ChargementTermineDelegate(ChargementTermine), new object[] { jsonResponse, erreur });
+                this.Invoke(new LoadCompletedDelegate(LoadCompleted), new object[] { jsonResponse, error });
             }));
 
-            threadChargement.Start();
+            loadThread.Start();
         }
 
-        private void ChargementTermine(string jsonResponse, string erreur)
+        private void LoadCompleted(string jsonResponse, string error)
         {
-            chargementEnCours = false;
+            isLoading = false;
 
             Cursor.Current = Cursors.Default;
             Cursor.Hide();
 
-            if (erreur != null)
+            if (error != null)
             {
-                label1.Text = "Échec du chargement.";
-                AfficherAvertissement("Impossible de contacter le serveur.\n\n" + erreur);
+                labelStatus.Text = "Failed to load.";
+                ShowWarning("Could not reach the server.\n\n" + error);
                 return;
             }
 
@@ -850,312 +842,307 @@ namespace API_diag
 
                 if (!apiResponse.success)
                 {
-                    label1.Text = "Échec du chargement.";
-                    AfficherAvertissement("Échec de la requête : " + apiResponse.message);
+                    labelStatus.Text = "Failed to load.";
+                    ShowWarning("Request failed: " + apiResponse.message);
                     return;
                 }
 
-                label1.Text = apiResponse.data.Length + " application(s) trouvée(s).";
-                AfficherApplications(apiResponse.data);
+                labelStatus.Text = apiResponse.data.Length + " application(s) found.";
+                DisplayApplications(apiResponse.data);
             }
             catch (Exception ex)
             {
-                label1.Text = "Échec du chargement.";
-                AfficherAvertissement("Impossible de lire la réponse du serveur.\n\n" + ex.Message);
+                labelStatus.Text = "Failed to load.";
+                ShowWarning("Could not parse the server response.\n\n" + ex.Message);
             }
         }
 
-        private void AfficherAvertissement(string message)
+        private void ShowWarning(string message)
         {
-            MessageBox.Show(message, "Attention", MessageBoxButtons.OK, MessageBoxIcon.Exclamation, MessageBoxDefaultButton.Button1);
+            MessageBox.Show(message, "Warning", MessageBoxButtons.OK, MessageBoxIcon.Exclamation, MessageBoxDefaultButton.Button1);
         }
 
-        private void AfficherApplications(ApplicationApi[] apps)
+        private void DisplayApplications(ApplicationApi[] apps)
         {
-            _dernieresApplications = apps;
+            _lastApplications = apps;
 
-            panel1.SuspendLayout();
-            panel1.Controls.Clear();
+            panelList.SuspendLayout();
+            panelList.Controls.Clear();
 
-            const int hauteurItem = 54;
-            const int marge = 8;
+            const int itemHeight = 54;
+            const int margin = 8;
 
             for (int i = 0; i < apps.Length; i++)
             {
                 ApplicationApi app = apps[i];
-                bool carteEnfoncee = false;
+                bool cardPressed = false; // local state captured by the delegates below
 
-                Panel carte = new Panel();
-                carte.Left = 8;
-                carte.Top = i * (hauteurItem + marge) + marge;
-                carte.Width = panel1.ClientSize.Width - 30;
-                carte.Height = hauteurItem;
-                carte.BackColor = Theme.CouleurFond;
+                Panel card = new Panel();
+                card.Left = 8;
+                card.Top = i * (itemHeight + margin) + margin;
+                card.Width = panelList.ClientSize.Width - 30;
+                card.Height = itemHeight;
+                card.BackColor = Theme.BackgroundColor;
 
-                PaintEventHandler carteArrondiePaint = delegate(object s, PaintEventArgs pe)
+                PaintEventHandler cardRoundedPaint = delegate(object s, PaintEventArgs pe)
                 {
-                    Color couleurSurface = carteEnfoncee ? Theme.CouleurCartePressee : Theme.CouleurCarte;
-                    using (SolidBrush brush = new SolidBrush(couleurSurface))
+                    Color surfaceColor = cardPressed ? Theme.CardPressedColor : Theme.CardColor;
+                    using (SolidBrush brush = new SolidBrush(surfaceColor))
                     {
-                        RenduArrondi.RemplirRectangleArrondi(pe.Graphics, brush, 0, 0, carte.Width, carte.Height, 14);
+                        RoundedRendering.FillRoundedRectangle(pe.Graphics, brush, 0, 0, card.Width, card.Height, 14);
                     }
                 };
-                carte.Paint += carteArrondiePaint;
+                card.Paint += cardRoundedPaint;
 
-                PictureBox pbIcone = new PictureBox();
-                pbIcone.Left = 10;
-                pbIcone.Top = (hauteurItem - 32) / 2;
-                pbIcone.Width = 32;
-                pbIcone.Height = 32;
-                pbIcone.BackColor = Theme.CouleurCarte;
+                PictureBox iconBox = new PictureBox();
+                iconBox.Left = 10;
+                iconBox.Top = (itemHeight - 32) / 2;
+                iconBox.Width = 32;
+                iconBox.Height = 32;
+                iconBox.BackColor = Theme.CardColor;
 
-                Bitmap bmpIcone = null; // rempli une fois le téléchargement terminé, capturé par la closure ci-dessous
+                Bitmap iconBitmap = null; // filled once the download finishes, captured by the closure below
 
-                pbIcone.Paint += delegate(object s, PaintEventArgs pe)
+                iconBox.Paint += delegate(object s, PaintEventArgs pe)
                 {
-                    if (bmpIcone == null) return;
+                    if (iconBitmap == null) return;
 
                     ImageAttributes attr = new ImageAttributes();
                     attr.SetColorKey(Color.Magenta, Color.Magenta);
 
-                    Rectangle destRect = new Rectangle(0, 0, pbIcone.Width, pbIcone.Height);
-                    pe.Graphics.DrawImage(bmpIcone, destRect, 0, 0, bmpIcone.Width, bmpIcone.Height, GraphicsUnit.Pixel, attr);
+                    Rectangle destRect = new Rectangle(0, 0, iconBox.Width, iconBox.Height);
+                    pe.Graphics.DrawImage(iconBitmap, destRect, 0, 0, iconBitmap.Width, iconBitmap.Height, GraphicsUnit.Pixel, attr);
                 };
 
-                carte.Controls.Add(pbIcone);
+                card.Controls.Add(iconBox);
 
                 if (!string.IsNullOrEmpty(app.icon))
                 {
-                    string urlIcone = ApiBaseUrl + "/icons/" + app.icon;
-                    IconLoader.Charger(urlIcone, app.id, pbIcone, delegate(Bitmap bmp)
+                    string iconUrl = ApiBaseUrl + "/icons/" + app.icon;
+                    IconLoader.Load(iconUrl, app.id, iconBox, delegate(Bitmap bmp)
                     {
-                        bmpIcone = bmp;
-                        pbIcone.Invalidate();
+                        iconBitmap = bmp;
+                        iconBox.Invalidate();
                     });
                 }
 
-                Label lblNom = new Label();
-                lblNom.Text = app.name;
-                lblNom.Font = Theme.PoliceNormaleGrasse;
-                lblNom.ForeColor = Theme.CouleurTexte;
-                lblNom.BackColor = Theme.CouleurCarte;
-                lblNom.Left = 14 + 32 + 10;
-                lblNom.Top = 10;
-                lblNom.Width = carte.Width - 100;
-                lblNom.Height = 20;
+                Label lblName = new Label();
+                lblName.Text = app.name;
+                lblName.Font = Theme.FontNormalBold;
+                lblName.ForeColor = Theme.TextColor;
+                lblName.BackColor = Theme.CardColor;
+                lblName.Left = 14 + 32 + 10;
+                lblName.Top = 10;
+                lblName.Width = card.Width - 100;
+                lblName.Height = 20;
 
-                Label lblSousTexte = new Label();
-                lblSousTexte.Text = "Toucher pour voir les détails";
-                lblSousTexte.Font = Theme.PolicePetite;
-                lblSousTexte.ForeColor = Theme.CouleurTexteSecondaire;
-                lblSousTexte.BackColor = Theme.CouleurCarte;
-                lblSousTexte.Left = lblNom.Left;
-                lblSousTexte.Top = 30;
-                lblSousTexte.Width = lblNom.Width;
-                lblSousTexte.Height = 16;
+                Label lblSubtext = new Label();
+                lblSubtext.Text = "Tap to view details";
+                lblSubtext.Font = Theme.FontSmall;
+                lblSubtext.ForeColor = Theme.TextColorSecondary;
+                lblSubtext.BackColor = Theme.CardColor;
+                lblSubtext.Left = lblName.Left;
+                lblSubtext.Top = 30;
+                lblSubtext.Width = lblName.Width;
+                lblSubtext.Height = 16;
 
                 Label lblChevron = new Label();
                 lblChevron.Text = "›";
                 lblChevron.Font = new Font("Tahoma", 14, FontStyle.Bold);
-                lblChevron.ForeColor = Theme.CouleurAccent;
-                lblChevron.BackColor = Theme.CouleurCarte;
+                lblChevron.ForeColor = Theme.AccentColor;
+                lblChevron.BackColor = Theme.CardColor;
                 lblChevron.Width = 24;
-                lblChevron.Height = hauteurItem - 20;
-                lblChevron.Left = carte.Width - 30;
+                lblChevron.Height = itemHeight - 20;
+                lblChevron.Left = card.Width - 30;
                 lblChevron.Top = 10;
                 lblChevron.TextAlign = ContentAlignment.TopCenter;
 
-                MouseEventHandler surAppui = delegate(object s, MouseEventArgs me)
+                MouseEventHandler onPress = delegate(object s, MouseEventArgs me)
                 {
-                    carteEnfoncee = true;
-                    carte.Invalidate();
+                    cardPressed = true;
+                    card.Invalidate();
 
-                    lblNom.BackColor = Theme.CouleurCartePressee;
-                    lblSousTexte.BackColor = Theme.CouleurCartePressee;
-                    lblChevron.BackColor = Theme.CouleurCartePressee;
+                    lblName.BackColor = Theme.CardPressedColor;
+                    lblSubtext.BackColor = Theme.CardPressedColor;
+                    lblChevron.BackColor = Theme.CardPressedColor;
                 };
-                MouseEventHandler surRelache = delegate(object s, MouseEventArgs ev)
+                MouseEventHandler onRelease = delegate(object s, MouseEventArgs ev)
                 {
-                    carteEnfoncee = false;
-                    carte.Invalidate();
+                    cardPressed = false;
+                    card.Invalidate();
 
-                    lblNom.BackColor = Theme.CouleurCarte;
-                    lblSousTexte.BackColor = Theme.CouleurCarte;
-                    lblChevron.BackColor = Theme.CouleurCarte;
+                    lblName.BackColor = Theme.CardColor;
+                    lblSubtext.BackColor = Theme.CardColor;
+                    lblChevron.BackColor = Theme.CardColor;
                 };
-                EventHandler ouvrirDetails = delegate(object s, EventArgs ev)
+                EventHandler openDetails = delegate(object s, EventArgs ev)
                 {
-                    OuvrirPageDetails(app);
+                    OpenDetailsPage(app);
                 };
 
-                carte.MouseDown += surAppui;
-                carte.MouseUp += surRelache;
+                card.MouseDown += onPress;
+                card.MouseUp += onRelease;
 
-                carte.Click += ouvrirDetails;
-                lblNom.Click += ouvrirDetails;
-                lblSousTexte.Click += ouvrirDetails;
-                lblChevron.Click += ouvrirDetails;
+                card.Click += openDetails;
+                lblName.Click += openDetails;
+                lblSubtext.Click += openDetails;
+                lblChevron.Click += openDetails;
 
-                carte.Controls.Add(lblNom);
-                carte.Controls.Add(lblSousTexte);
-                carte.Controls.Add(lblChevron);
-                panel1.Controls.Add(carte);
+                card.Controls.Add(lblName);
+                card.Controls.Add(lblSubtext);
+                card.Controls.Add(lblChevron);
+                panelList.Controls.Add(card);
             }
 
-            panel1.ResumeLayout();
+            panelList.ResumeLayout();
         }
 
-        private void OuvrirPageDetails(ApplicationApi app)
+        private void OpenDetailsPage(ApplicationApi app)
         {
-            _appCourante = app;
+            _currentApp = app;
 
-            labelNomDetails.Text = app.name;
-            labelNomDetails.BackColor = Theme.CouleurCarte;
-            labelIdDetails.Text = "ID : " + app.id;
-            labelIdDetails.BackColor = Theme.CouleurCarte;
+            labelDetailsName.Text = app.name;
+            labelDetailsName.BackColor = Theme.CardColor;
+            labelDetailsId.Text = "ID: " + app.id;
+            labelDetailsId.BackColor = Theme.CardColor;
 
-            progressTelechargement.Visible = false;
-            progressTelechargement.Value = 0;
-            labelStatutTelechargement.Visible = false;
-            buttonTelecharger.Enabled = true;
-            buttonTelecharger.Text = "Télécharger";
+            progressDownload.Visible = false;
+            progressDownload.Value = 0;
+            labelDownloadStatus.Visible = false;
+            buttonDownload.Enabled = true;
+            buttonDownload.Text = "Download";
 
             this.SuspendLayout();
-            panel1.Visible = false;
-            panelHeaderListe.Visible = false;
-            panelRecherche.Visible = false;
-            panelMiseAJour.Visible = false;
-            label1.Visible = false;
+            panelList.Visible = false;
+            panelListHeader.Visible = false;
+            panelSearch.Visible = false;
+            panelUpdate.Visible = false;
+            labelStatus.Visible = false;
             panelDetails.Visible = true;
             this.ResumeLayout();
         }
 
-        private void buttonTelecharger_Click(object sender, EventArgs e)
+        private void buttonDownload_Click(object sender, EventArgs e)
         {
-            if (telechargementEnCours || _appCourante == null) return;
+            if (isDownloading || _currentApp == null) return;
 
-            telechargementEnCours = true;
-            buttonTelecharger.Enabled = false;
-            buttonTelecharger.Text = "Téléchargement...";
-            progressTelechargement.Visible = true;
-            progressTelechargement.Value = 0;
-            labelStatutTelechargement.Visible = true;
-            labelStatutTelechargement.Text = "Démarrage...";
+            isDownloading = true;
+            buttonDownload.Enabled = false;
+            buttonDownload.Text = "Downloading...";
+            progressDownload.Visible = true;
+            progressDownload.Value = 0;
+            labelDownloadStatus.Visible = true;
+            labelDownloadStatus.Text = "Starting...";
 
-            string nomFichier = _appCourante.name + ".cab";
-            string urlCab = ApiBaseUrl + "/cabs/" + EncoderComposantUrl(_appCourante.name) + ".cab";
+            string fileName = _currentApp.name + ".cab";
+            string cabUrl = ApiBaseUrl + "/cabs/" + EncodeUrlComponent(_currentApp.name) + ".cab";
 
-            Thread threadTelechargement = new Thread(new ThreadStart(delegate
+            Thread downloadThread = new Thread(new ThreadStart(delegate
             {
-                string cheminFichier = null;
-                string erreur = null;
+                string filePath = null;
+                string error = null;
 
                 try
                 {
-                    cheminFichier = TelechargerFichier(urlCab, nomFichier);
+                    filePath = DownloadFile(cabUrl, fileName);
                 }
                 catch (Exception ex)
                 {
-                    erreur = ex.Message + urlCab;
+                    error = ex.Message + cabUrl;
                 }
 
-                this.Invoke(new TelechargementTermineDelegate(TelechargementTermine), new object[] { cheminFichier, erreur });
+                this.Invoke(new DownloadCompletedDelegate(DownloadCompleted), new object[] { filePath, error });
             }));
 
-            threadTelechargement.Start();
+            downloadThread.Start();
         }
 
-        private string TelechargerFichier(string url, string nomFichier)
+        private string DownloadFile(string url, string fileName)
         {
             HttpWebRequest request = (HttpWebRequest)WebRequest.Create(url);
             request.Method = "GET";
 
             using (HttpWebResponse response = (HttpWebResponse)request.GetResponse())
             {
-                long tailleTotale = response.ContentLength;
+                long totalSize = response.ContentLength;
 
-                string dossierDestination = "\\My Documents";
-                if (!Directory.Exists(dossierDestination))
-                {
-                    dossierDestination = "\\";
-                }
-                string cheminComplet = Path.Combine(dossierDestination, nomFichier);
+                string fullPath = Path.Combine(GetApplicationFolder(), fileName);
 
-                using (Stream fluxReseau = response.GetResponseStream())
-                using (FileStream fluxFichier = new FileStream(cheminComplet, FileMode.Create, FileAccess.Write))
+                using (Stream networkStream = response.GetResponseStream())
+                using (FileStream fileStream = new FileStream(fullPath, FileMode.Create, FileAccess.Write))
                 {
                     byte[] buffer = new byte[4096];
-                    long totalLu = 0;
-                    int lu;
+                    long totalRead = 0;
+                    int read;
 
-                    while ((lu = fluxReseau.Read(buffer, 0, buffer.Length)) > 0)
+                    while ((read = networkStream.Read(buffer, 0, buffer.Length)) > 0)
                     {
-                        fluxFichier.Write(buffer, 0, lu);
-                        totalLu += lu;
+                        fileStream.Write(buffer, 0, read);
+                        totalRead += read;
 
-                        if (tailleTotale > 0)
+                        if (totalSize > 0)
                         {
-                            int pourcentage = (int)((totalLu * 100L) / tailleTotale);
-                            this.Invoke(new ProgressionTelechargementDelegate(MettreAJourProgression), new object[] { pourcentage });
+                            int percentage = (int)((totalRead * 100L) / totalSize);
+                            this.Invoke(new DownloadProgressDelegate(DownloadProgressChanged), new object[] { percentage });
                         }
                     }
                 }
 
-                return cheminComplet;
+                return fullPath;
             }
         }
 
-        private void MettreAJourProgression(int pourcentage)
+        private void DownloadProgressChanged(int percentage)
         {
-            if (pourcentage < 0) pourcentage = 0;
-            if (pourcentage > 100) pourcentage = 100;
-            progressTelechargement.Value = pourcentage;
-            labelStatutTelechargement.Text = pourcentage + " %";
+            if (percentage < 0) percentage = 0;
+            if (percentage > 100) percentage = 100;
+            progressDownload.Value = percentage;
+            labelDownloadStatus.Text = percentage + " %";
         }
 
-        private void TelechargementTermine(string cheminFichier, string erreur)
+        private void DownloadCompleted(string filePath, string error)
         {
-            telechargementEnCours = false;
-            buttonTelecharger.Enabled = true;
-            buttonTelecharger.Text = "Télécharger";
+            isDownloading = false;
+            buttonDownload.Enabled = true;
+            buttonDownload.Text = "Download";
 
-            if (erreur != null)
+            if (error != null)
             {
-                labelStatutTelechargement.Text = "Échec du téléchargement.";
-                AfficherAvertissement("Le téléchargement a échoué.\n\n" + erreur);
+                labelDownloadStatus.Text = "Download failed.";
+                ShowWarning("The download failed.\n\n" + error);
                 return;
             }
 
-            progressTelechargement.Value = 100;
-            labelStatutTelechargement.Text = "Installation en cours...";
+            progressDownload.Value = 100;
+            labelDownloadStatus.Text = "Installing...";
 
-            LancerInstallation(cheminFichier);
+            LaunchInstallation(filePath);
         }
 
-        private void LancerInstallation(string cheminFichier)
+        private void LaunchInstallation(string filePath)
         {
             try
             {
-                Process.Start(new ProcessStartInfo(cheminFichier, ""));
-                labelStatutTelechargement.Text = "Installation lancée.";
+                Process.Start(new ProcessStartInfo(filePath, ""));
+                labelDownloadStatus.Text = "Installation started.";
             }
             catch (Exception ex)
             {
-                labelStatutTelechargement.Text = "Téléchargé, mais l'installation n'a pas pu démarrer.";
-                AfficherAvertissement("Le fichier a été téléchargé (" + cheminFichier + "), mais son installation automatique a échoué.\n\n" + ex.Message + "\n\nVous pouvez l'installer manuellement depuis l'explorateur de fichiers.");
+                labelDownloadStatus.Text = "Downloaded, but installation could not start.";
+                ShowWarning("The file was downloaded (" + filePath + "), but automatic installation failed.\n\n" + ex.Message + "\n\nYou can install it manually from the file explorer.");
             }
         }
 
-        private void buttonRetour_Click(object sender, EventArgs e)
+        private void buttonBack_Click(object sender, EventArgs e)
         {
             this.SuspendLayout();
             panelDetails.Visible = false;
-            panel1.Visible = true;
-            panelHeaderListe.Visible = true;
-            panelRecherche.Visible = true;
-            panelMiseAJour.Visible = !string.IsNullOrEmpty(_versionDisponibleMiseAJour) && CompareVersions(_versionDisponibleMiseAJour, ObtenirVersionApplication()) > 0;
-            label1.Visible = true;
-            PositionnerControles();
+            panelList.Visible = true;
+            panelListHeader.Visible = true;
+            panelSearch.Visible = true;
+            panelUpdate.Visible = !string.IsNullOrEmpty(_availableUpdateVersion) && CompareVersions(_availableUpdateVersion, GetApplicationVersion()) > 0;
+            labelStatus.Visible = true;
+            LayoutControls();
             this.ResumeLayout();
         }
 
@@ -1173,15 +1160,21 @@ namespace API_diag
             }
         }
 
-        private void menuItem2_Click(object sender, EventArgs e)
+        private void menuItemExit_Click(object sender, EventArgs e)
         {
             Application.Exit();
         }
 
-        private string ObtenirVersionApplication()
+        private string GetApplicationVersion()
         {
             Version v = Assembly.GetExecutingAssembly().GetName().Version;
             return v.Major + "." + v.Minor + "." + v.Build;
+        }
+
+        private static string GetApplicationFolder()
+        {
+            string assemblyPath = Assembly.GetExecutingAssembly().GetName().CodeBase;
+            return Path.GetDirectoryName(assemblyPath);
         }
     }
 

@@ -2,27 +2,27 @@
 
 namespace API_diag
 {
-    // Le Compact Framework n'expose pas GraphicsPath : les rectangles à coins arrondis
-    // sont recomposés à la main à partir de rectangles pleins + quarts de cercle (FillPie).
-    public static class RenduArrondi
+    // The Compact Framework doesn't expose GraphicsPath: rounded-corner rectangles
+    // are recreated by hand from solid rectangles + full circles (used as corner fillers).
+    public static class RoundedRendering
     {
-        public static void RemplirRectangleArrondi(Graphics g, Brush brush, int x, int y, int largeur, int hauteur, int rayon)
+        public static void FillRoundedRectangle(Graphics g, Brush brush, int x, int y, int width, int height, int radius)
         {
-            if (rayon > largeur / 2) rayon = largeur / 2;
-            if (rayon > hauteur / 2) rayon = hauteur / 2;
+            if (radius > width / 2) radius = width / 2;
+            if (radius > height / 2) radius = height / 2;
 
-            int diametre = rayon * 2;
+            int diameter = radius * 2;
 
-            // Bandes centrales horizontale + verticale : forment une croix qui couvre
-            // tout sauf les 4 coins.
-            g.FillRectangle(brush, x + rayon, y, largeur - diametre, hauteur);
-            g.FillRectangle(brush, x, y + rayon, largeur, hauteur - diametre);
+            // Horizontal + vertical center bands: form a cross covering everything
+            // except the 4 corners.
+            g.FillRectangle(brush, x + radius, y, width - diameter, height);
+            g.FillRectangle(brush, x, y + radius, width, height - diameter);
 
-            // Les 4 coins, dessinés comme des quarts de cercle.
-            g.FillEllipse(brush, x, y, diametre, diametre);
-            g.FillEllipse(brush, x + largeur - diametre, y, diametre, diametre);
-            g.FillEllipse(brush, x, y + hauteur - diametre, diametre, diametre);
-            g.FillEllipse(brush, x + largeur - diametre, y + hauteur - diametre, diametre, diametre);
+            // The 4 corners, drawn as full circles (overlap with the bands above is harmless).
+            g.FillEllipse(brush, x, y, diameter, diameter);
+            g.FillEllipse(brush, x + width - diameter, y, diameter, diameter);
+            g.FillEllipse(brush, x, y + height - diameter, diameter, diameter);
+            g.FillEllipse(brush, x + width - diameter, y + height - diameter, diameter, diameter);
         }
     }
 }
